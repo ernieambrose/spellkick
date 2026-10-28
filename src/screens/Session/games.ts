@@ -11,7 +11,12 @@ export interface GameResult {
 /**
  * What every game receives. The shell times the word and records results.
  * Any result except 'practice' ends the word; after a 'practice' result the game
- * ends the word with another onResult or with onSkip.
+ * ends the word with another onResult or with onSkip. Once a word has ended, further
+ * calls for it are ignored.
+ * The word unmounts as soon as it ends, so a game shows its own feedback (shake,
+ * correct spelling) before calling onResult.
+ * A game must never call makeMisspelling without a loaded dictionary (the session
+ * only starts Spot the Misspelling once loadDictionary() has succeeded).
  */
 export interface GameProps {
   word: SessionWord;

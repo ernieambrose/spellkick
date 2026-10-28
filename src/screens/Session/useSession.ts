@@ -40,6 +40,9 @@ export interface SessionOptions {
   now?: () => Date;
 }
 
+/** 'dictionary': Spot the Misspelling couldn't load its word list; 'load': anything else (usually offline). */
+export type SessionError = 'load' | 'dictionary';
+
 export interface SessionState {
   words: SessionWord[];
   index: number;
@@ -49,6 +52,8 @@ export interface SessionState {
   next(): void;
   done: boolean;
   loading: boolean;
+  error: SessionError | null;
+  retry(): void;
   summary: SessionSummary;
   timerOn: boolean;
   allWords: string[]; // every word in the kid's lists, display casing
@@ -85,16 +90,19 @@ function uniqueWords(lists: WordList[]): string[] {
   return [...seen.values()];
 }
 
-/** Which words this game can make a puzzle from. Without the dictionary, Spot can't check, so it allows all. */
+class DictionaryError extends Error {}
+
+/** Which words this game can make a puzzle from. Spot can't run without the dictionary. */
 async function usableFor(game: GameId, rng: Rng, allWords: string[]): Promise<(w: string) => boolean> {
   if (game === 'scramble') return (w) => makeScramble(w, rng) !== null;
+  let dict: Set<string>;
   try {
-    const dict = await loadDictionary();
-    const avoid = new Set(allWords.map(normalizeWord));
-    return (w) => makeMisspelling(w, { rng, isRealWord: (c) => dict.has(c), avoid }) !== null;
-  } catch {
-    return () => true;
+    dict = await loadDictionary();
+  } catch (err) {
+    throw new DictionaryError(String(err));
   }
+  const avoid = new Set(allWords.map(normalizeWord));
+  return (w) => makeMisspelling(w, { rng, isRealWord: (c) => dict.has(c), avoid }) !== null;
 }
 
 async function loadSetup(
@@ -149,6 +157,8 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
 
   const [setup, setSetup] = useState<Setup | null>(null);
   const [index, setIndex] = useState(0);
+  const [error, setError] = useState<SessionError | null>(null);
+  const [attempt, setAttempt] = useState(0); // bumped by retry()
   const [summary, setSummary] = useState<SessionSummary>(EMPTY_SUMMARY);
   const recorded = useRef<Attempt[]>([]);
   const score = useRef({ points: 0, stars: 0 });
@@ -159,12 +169,17 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
     let live = true;
     loadSetup(repo, activeProfile, game, mode, rngRef.current, nowRef.current()).then(
       (s) => live && setSetup(s),
-      ignore, // offline before Task 15: stay on the loading state
+      (err: unknown) => live && setError(err instanceof DictionaryError ? 'dictionary' : 'load'),
     );
     return () => {
       live = false;
     };
-  }, [repo, activeProfile, game, mode]);
+  }, [repo, activeProfile, game, mode, attempt]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setAttempt((n) => n + 1);
+  }, []);
 
   const words = setup?.words ?? [];
   const done = setup !== null && index >= words.length;
@@ -250,13 +265,17 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
       }));
       repo.addAwards(awards).catch(ignore);
     }
+    // Only this session's generated answers may move the level; old ones already did.
+    const playedGenerated = recorded.current.some((a) => a.listId === null && a.kind !== 'practice');
     try {
-      const level = adaptGeneratedLevel(
-        setup.profile.generatedLevel,
-        attempts.filter((a) => a.listId === null),
-      );
-      if (level !== setup.profile.generatedLevel) {
-        repo.saveProfile({ ...setup.profile, generatedLevel: level }).catch(ignore);
+      if (playedGenerated) {
+        const level = adaptGeneratedLevel(
+          setup.profile.generatedLevel,
+          attempts.filter((a) => a.listId === null),
+        );
+        if (level !== setup.profile.generatedLevel) {
+          repo.saveProfile({ ...setup.profile, generatedLevel: level }).catch(ignore);
+        }
       }
     } catch {
       // the level update must never block the done screen
@@ -271,7 +290,9 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
     skip,
     next,
     done,
-    loading: setup === null,
+    loading: setup === null && error === null,
+    error,
+    retry,
     summary,
     timerOn: setup?.profile.timerOn ?? false,
     allWords: setup?.allWords ?? [],

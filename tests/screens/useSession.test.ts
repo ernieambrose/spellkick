@@ -121,4 +121,31 @@ describe('useSession', () => {
       expect((await repo.listAwards(felix.id)).map((a) => a.badgeId)).toContain('first-kick'),
     );
   });
+
+  it('does not move the generated level in a session with no generated words', async () => {
+    const mk = (id: string, words: string[], testDate: string | null): WordList => ({
+      id,
+      profileId: felix.id,
+      name: id,
+      testDate,
+      source: 'school',
+      author: null,
+      words,
+      createdAt: '2026-10-20T12:00:00.000Z',
+    });
+    const oldGenerated: Attempt[] = Array.from({ length: 10 }, (_, i) => ({
+      ...cleanAttempt(`oldword${i}`, '2026-10-20'),
+      listId: null,
+    }));
+    const { repo, hook } = await setup(async (r) => {
+      await r.saveList(mk('cur', ['planet', 'garden', 'window', 'bridge', 'castle', 'pencil', 'rocket', 'basket'], '2026-10-30'));
+      await r.saveList(mk('old', ['carrot', 'monkey', 'butter', 'ladder'], null));
+      await r.addAttempts(oldGenerated);
+    });
+    expect(hook.result.current.words.every((w) => w.listId !== null)).toBe(true);
+    answerAll(hook);
+    await waitFor(async () => expect(await repo.listSessions(felix.id)).toHaveLength(1));
+    const [stored] = await repo.listProfiles();
+    expect(stored.generatedLevel).toBe(5);
+  });
 });
