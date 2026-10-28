@@ -7,7 +7,11 @@ import { useActiveProfile } from './app/profileContext';
 import { RepoProvider } from './app/RepoProvider';
 import type { Repo } from './data/repo';
 import { KidPlaceholder } from './screens/Kid/KidPlaceholder';
-import { ParentPlaceholder } from './screens/Parent/ParentPlaceholder';
+import { ListEditor } from './screens/Parent/ListEditor';
+import { ParentGate } from './screens/Parent/ParentGate';
+import { ParentHome } from './screens/Parent/ParentHome';
+import { ProfileEditor } from './screens/Parent/ProfileEditor';
+import { ProgressView } from './screens/Parent/ProgressView';
 import { Profiles } from './screens/Profiles/Profiles';
 import { SignIn } from './screens/SignIn/SignIn';
 
@@ -40,7 +44,12 @@ export default function App({ repo, authClient }: AppProps) {
                 <Route index element={<Home />} />
                 <Route path="/profiles" element={<Profiles />} />
                 <Route path="/kid/:id/*" element={<KidPlaceholder />} />
-                <Route path="/parent" element={<ParentPlaceholder />} />
+                <Route path="/parent" element={<ParentGate />}>
+                  <Route index element={<ParentHome />} />
+                  <Route path="profile/:id" element={<ProfileEditor />} />
+                  <Route path="list/:id" element={<ListEditor />} />
+                  <Route path="progress/:profileId" element={<ProgressView />} />
+                </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

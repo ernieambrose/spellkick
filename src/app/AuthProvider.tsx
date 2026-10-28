@@ -45,6 +45,10 @@ export function AuthProvider({ client: clientProp, children }: Props) {
         await client.signOut();
         setStatus('signedOut');
       },
+      async getUserId() {
+        if (!client) return null;
+        return (await client.getSession()).userId ?? null;
+      },
     }),
     [client, status],
   );
