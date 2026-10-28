@@ -1,11 +1,11 @@
-# SpellUp — Design
+# SpellKick — Design
 
 Date: 2026-10-28
 Status: Draft for review
 
 ## Intent and the why
 
-SpellUp is a spelling practice web app, built first for two kids in one family and possibly shared more widely later.
+SpellKick is a spelling practice web app, built first for two kids in one family and possibly shared more widely later.
 
 - **The 11-year-old** is in a gifted program, strong at most things, and struggles with spelling. He avoids hard work that makes him feel slow and picks the easiest homework first. What keeps him at hobbies like fishing and skateboarding is **progression**: being able to do something this time that he couldn't do last time. He is competitive and reward-driven.
 - **The 7-year-old** is also in a gifted program and spells well, but benefits from practice. She loves arts and crafts, storytelling, and being social.
@@ -117,11 +117,17 @@ The app's real job is not drilling. It is getting a kid to *choose* to work on t
 **Misspelling generator**
 - Rules such as: swapped adjacent letters, ie/ei swaps, dropped or doubled consonants, vowel substitutions (e.g., -able/-ible, -ant/-ent), silent letter removal. The output must differ from the real word and must not be another real word from the kid's lists.
 
-## Open questions for the user
+## Resolved with the user (after review)
 
-1. Family-only v1 (invite/allowlist gate) vs. open sign-up (COPPA work from day one). Recommended: family-only.
-2. Parent area scope: list management only, or also a progress view? Kids able to add words? Recommended: parent area behind a parent PIN with list management plus a simple per-kid progress view; kids can't edit lists.
-3. School laptop test: does the school laptop block the hosting domain, home-screen install, or Supabase? (User action.)
+1. **Family-only v1.** Sign-up is gated by an invite/allowlist; no public sign-up, so no COPPA consent flow yet. Keep the account model open to real account creation later.
+2. **Parent area behind a parent PIN**, with list management plus a simple per-kid progress view. Kids can't edit lists.
+3. **School laptops**: the user will test once a deployed build exists. If blocked, the kids' iPads are the fallback; not a v1 blocker.
+4. **GitHub repo is public.**
+5. Name: **SpellKick** (spellkick.com and spellkick.app were unregistered on 2026-10-28). "SpellUp" was dropped because an existing app uses it.
+
+## Future: teachers
+
+The user wants to pin the idea of teacher accounts: a teacher could add word lists to their students' libraries. Don't build it in v1, but avoid data-model choices that make it hard (e.g., lists should have an owner/author separate from the kid profile that practices them, which the `source` field already hints at).
 
 ## Left to the builder
 
