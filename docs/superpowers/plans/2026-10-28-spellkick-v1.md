@@ -6,7 +6,7 @@
 
 **Architecture:** All learning rules live in pure, fully unit-tested TypeScript modules under `src/engine/` (no React, no network). A thin data layer (`src/data/`) exposes one `Repo` interface with an in-memory implementation (tests) and a Supabase implementation (app). Attempts and sessions are append-only records with client-generated UUIDs; word states are *derived* from attempts, so syncing two devices never conflicts. React screens under `src/screens/` only call engine functions and the repo.
 
-**Tech Stack:** Vite + React 18 + TypeScript (strict), React Router (BrowserRouter, with a `vercel.json` SPA rewrite), Tailwind CSS, Vitest + Testing Library, `vite-plugin-pwa`, `@supabase/supabase-js`, `idb-keyval` (offline outbox), `wordlist-english` (dictionary source, build-time only). Hosting: Vercel (free Hobby tier), auto-deploying from GitHub with a preview URL per pull request; GitHub Actions runs CI.
+**Tech Stack:** Vite + React 18 + TypeScript (strict), React Router (BrowserRouter, with a `vercel.json` SPA rewrite), Tailwind CSS, Vitest + Testing Library, `vite-plugin-pwa`, `@supabase/supabase-js`, `idb-keyval` (offline cache + write queue), `wordlist-english` (dictionary source, build-time only). Hosting: Vercel (free Hobby tier), auto-deploying from GitHub with a preview URL per pull request; GitHub Actions runs CI.
 
 **Spec:** `docs/superpowers/specs/2026-10-28-spellkick-design.md`
 
@@ -59,16 +59,16 @@ src/
     repo.ts            Repo interface
     memoryRepo.ts      in-memory Repo (tests, dev)
     supabaseRepo.ts    Supabase Repo
-    outbox.ts          offline write queue
+    offlineRepo.ts     Repo wrapper: read cache + offline write queue
     gradeWords.json    curated grade 1–8 word pool
-    dictionary.txt     generated, lazy-loaded (public/)
   app/                 providers, router, auth
   screens/             one folder per screen
   components/          shared UI (WordPill, ProgressBar, LetterTiles, Timer, PinPad)
+public/dictionary.txt  generated word list, lazy-loaded
 supabase/migrations/0001_init.sql
 scripts/build-dictionary.ts
 tests/                 mirrors src/
-docs/setup.md          Supabase + GitHub Pages setup for the parent
+docs/setup.md          Supabase + Vercel setup for the parent
 .github/workflows/ci.yml
 vercel.json            SPA rewrite to index.html
 ```
@@ -112,7 +112,14 @@ it('renders the SpellKick name', () => {
 - Produces:
   - `normalizeWord(w: string): string` — trim, lowercase, collapse inner whitespace. Used as the identity key for a word everywhere.
   - `parseWordList(text: string, max = 100): { words: string[]; truncated: boolean; dropped: string[] }` — `words` keep the parent's original casing, de-duplicated by `normalizeWord`, in first-seen order.
-  - `types.ts`: `AttemptKind = 'clean' | 'hinted' | 'miss' | 'practice'`, `GameId = 'scramble' | 'misspell'`, `WordState = 'new' | 'learning' | 'tricky' | 'mastered'`, `Attempt`, `Session`, `WordList`, `Profile`, `Award { profileId; badgeId; earnedAt }` (fields as in Task 9's schema, camelCased). Every `Attempt` and `Session` has a client-generated `id` (`crypto.randomUUID()`) and `profileId`.
+  - `types.ts` (all ids are client-generated `crypto.randomUUID()` strings; dates are `YYYY-MM-DD`, timestamps ISO strings):
+    - `AttemptKind = 'clean' | 'hinted' | 'miss' | 'practice'`; `GameId = 'scramble' | 'misspell'`; `WordState = 'new' | 'learning' | 'tricky' | 'mastered'`; `Theme = 'default' | 'skate' | 'fishing' | 'art'`; `ListSource = 'school' | 'parent' | 'teacher' | 'other'`
+    - `Profile { id; name; grade: number /*1–8*/; generatedLevel: number; pinHash: string | null; timerOn: boolean; theme: Theme; createdAt }`
+    - `WordList { id; profileId; name; testDate: string | null; source: ListSource; author: string | null; words: string[] /*parent casing, ≤100*/; createdAt }`
+    - `Attempt { id; profileId; sessionId; word: string /*normalizeWord form*/; listId: string | null /*null = generated-pool word*/; game: GameId; kind: AttemptKind; ms: number | null; localDate; createdAt }`
+    - `Session { id; profileId; game: GameId; mode: 'normal' | 'extra'; startedAt; completedAt: string | null; localDate; points: number; stars: number; trickyCount: number /*words that were tricky at start*/ }`
+    - `Award { profileId; badgeId; earnedAt }`
+    - `AttemptLike = Pick<Attempt, 'word' | 'kind' | 'localDate' | 'createdAt'>` — what pure engine functions accept, so tests can pass minimal objects.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -149,7 +156,9 @@ Note: a line containing a space is one entry only when separated by newline; spa
 **Files:** Create `src/engine/blocklist.ts`, `src/engine/safety.ts`; Test `tests/engine/safety.test.ts`
 
 **Interfaces:**
-- Produces: `BLOCKED_TERMS: readonly string[]` (lowercase); `containsBlocked(s: string): boolean` — true if any term appears as a substring of `s.toLowerCase()` with non-letters removed.
+- Produces:
+  - `BLOCKED_TERMS: readonly string[]` (lowercase); `containsBlocked(s: string): boolean` — true if any term appears as a substring of `s.toLowerCase()` with non-letters removed. Used **only on generated output** (scrambles, misspellings).
+  - `INAPPROPRIATE_WORDS: readonly string[]`; `isInappropriateWord(w: string): boolean` — whole-word match after `normalizeWord`. Used to screen the generated word pool. Never substring, so `class`, `grape`, `title`, `speech` remain usable.
 
 The list covers profanity, slurs, sexual terms, and violent/drug terms, including short ones (`ass`, `fag`, `rape`, `kkk`, `nazi`, `sex`, `cum`, `tit`, `poo`, `pee`, `fart` — kid-distracting is enough to qualify). Short terms will cause frequent reshuffles; that is intended. Keep the file one term per line, alphabetized, with a header comment explaining it's matched as substrings.
 
@@ -162,10 +171,14 @@ it('ignores separators', () => expect(containsBlocked('s-e x')).toBe(true));
 it('passes clean strings', () => expect(containsBlocked('rhythm')).toBe(false));
 it('every term is lowercase letters only', () =>
   BLOCKED_TERMS.forEach(t => expect(t).toMatch(/^[a-z]+$/)));
+it('whole-word check does not flag words containing a term', () => {
+  expect(isInappropriateWord('class')).toBe(false);
+  expect(isInappropriateWord('grape')).toBe(false);
+});
 ```
 
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(engine): blocklist substring filter`
+- [ ] **Step 5: Commit** `feat(engine): content safety filters`
 
 ---
 
@@ -211,11 +224,11 @@ it('never returns a blocked arrangement for separate', () => {
 
 **Interfaces:**
 - Produces:
-  - `scripts/build-dictionary.ts` (`npm run build:dict`): writes lowercase words from `wordlist-english` frequency tiers ≤ 70 (~80k words), one per line.
+  - `scripts/build-dictionary.ts` (`npm run build:dict`): merges `english/10`…`english/70` and `english/american/10`…`english/american/70` from `wordlist-english`, lowercased, deduped, one per line (must stay under 2 MB).
   - `loadDictionary(): Promise<Set<string>>` — fetches `${import.meta.env.BASE_URL}dictionary.txt` once and caches.
-  - `makeMisspelling(word: string, opts: { rng: Rng; isRealWord: (w: string) => boolean; avoid?: Set<string> }, maxTries = 30): string | null` — result keeps the parent's casing pattern for the first letter, differs from `normalizeWord(word)`, is not `isRealWord`, not in `avoid` (the kid's other words), not `containsBlocked`. `null` for words under 4 letters or if no rule yields a valid result.
+  - `makeMisspelling(word: string, opts: { rng: Rng; isRealWord: (w: string) => boolean; avoid?: Set<string> }, maxTries = 30): string | null` — `isRealWord` and `avoid` receive/contain lowercase strings. **The first letter is never changed** (keeps the parent's casing). Result differs from `normalizeWord(word)`, is not `isRealWord`, not in `avoid` (the kid's other words), not `containsBlocked`. `null` for words under 3 letters, multi-word entries, or if no rule yields a valid result.
 
-Rules, tried in random order: swap two adjacent interior letters; `ie`↔`ei`; double a single consonant / undouble a double consonant; drop a silent `e`, `h`, `k`, `w`, `b` where present; vowel swap in an unstressed spot (`a↔e`, `e↔i`); suffix swaps `able↔ible`, `ant↔ent`, `ance↔ence`, `tion↔sion`; `c↔s` before e/i; `ph↔f`.
+Rules, tried in random order: swap two adjacent interior letters; `ie`↔`ei`; double a single consonant / undouble a double consonant; drop a silent `e`, `h`, `k`, `w`, `b` where present; vowel swap in an unstressed spot (`a↔e`, `e↔i`); suffix swaps `able↔ible`, `ant↔ent`, `ance↔ence`, `tion↔sion`; `c↔s` before e/i; `ph↔f`; for short words, double the final consonant (`sun`→`sunn`) or add a silent final `e` (`dog`→`doge` is rejected as real; `sun`→`sune`). Rules apply only after the first letter.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -230,11 +243,15 @@ it('produces common error patterns', () => {
   const outs = new Set(Array.from({length:200},(_,i)=>makeMisspelling('receive', opts(i))));
   expect(outs).toContain('recieve');
 });
-it('returns null for short words', () => expect(makeMisspelling('cat', opts(1))).toBeNull());
+it('returns null for 2-letter words', () => expect(makeMisspelling('at', opts(1))).toBeNull());
+it('misspells 3-letter words', () => expect(makeMisspelling('sun', opts(1))).not.toBeNull());
+it('never changes the first letter', () => {
+  for (let i = 0; i < 200; i++) expect(makeMisspelling('wrist', opts(i))?.[0]).toBe('w');
+});
 it('keeps a leading capital', () => expect(makeMisspelling('Wednesday', opts(3))![0]).toBe('W'));
 ```
 
-Extend `safetyCorpus.test.ts`: same corpus, 50 seeds each, `makeMisspelling` outputs never `containsBlocked`.
+Extend `safetyCorpus.test.ts`: same corpus, 50 seeds each, `makeMisspelling` outputs never `containsBlocked`; and ≥95% of single-word corpus entries with ≥3 letters get a non-null misspelling within 10 seeds (guards against the blocklist starving long words like `competition`).
 
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement**, run `npm run build:dict`. **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(engine): dictionary-checked misspelling generator`
@@ -246,15 +263,15 @@ Extend `safetyCorpus.test.ts`: same corpus, 50 seeds each, `makeMisspelling` out
 **Files:** Create `src/engine/mastery.ts`, `src/engine/streak.ts` (only `localDate` here); Test `tests/engine/mastery.test.ts`
 
 **Interfaces:**
-- Consumes: `Attempt { word: string /*normalized*/; kind: AttemptKind; localDate: string /*YYYY-MM-DD*/; createdAt: string }`
+- Consumes: `AttemptLike` (Task 2)
 - Produces:
   - `localDate(d: Date, timeZone?: string): string` — `YYYY-MM-DD` in the device's zone (use `Intl.DateTimeFormat('en-CA')`).
-  - `deriveWordState(attempts: Attempt[]): WordState` (attempts for one word, any order)
-  - `summarize(attempts: Attempt[]): Map<string, WordState>` keyed by normalized word.
+  - `deriveWordState(attempts: AttemptLike[]): WordState` (attempts for one word, any order)
+  - `summarize(attempts: AttemptLike[]): Map<string, WordState>` keyed by normalized word.
 
 Rules (from spec + Global Constraints):
 - no attempts → `new`
-- let `afterMiss` = attempts after the latest `miss`. If distinct `localDate`s of `clean` attempts in `afterMiss` ≥ 3 → `mastered`
+- let `afterMiss` = attempts after the latest `miss`. A day **counts** if it has ≥1 `clean` and no `hinted` attempt that day (spec: hinted solves don't count toward mastery that day). If counting days in `afterMiss` ≥ 3 → `mastered`
 - else if any of the last 3 attempts (by `createdAt`, ignoring `practice`) is `miss` or `hinted` → `tricky`
 - else → `learning`
 - `practice` attempts never change state.
@@ -273,6 +290,8 @@ it('a miss after mastery drops to tricky', () =>
 it('hinted solves are tricky and do not count toward mastery', () =>
   expect(deriveWordState([a('hinted','2026-11-01'),a('hinted','2026-11-02'),a('hinted','2026-11-03')])).toBe('tricky'));
 it('practice never changes state', () => expect(deriveWordState([a('practice','2026-11-01')])).toBe('new'));
+it('a hinted solve voids that day for mastery', () =>
+  expect(deriveWordState([a('clean','2026-11-01'),a('clean','2026-11-02'),a('hinted','2026-11-03','2026-11-03T10:00Z'),a('clean','2026-11-03','2026-11-03T11:00Z')])).not.toBe('mastered'));
 it('localDate uses local zone near midnight', () =>
   expect(localDate(new Date('2026-11-02T03:58:00Z'), 'America/New_York')).toBe('2026-11-01'));
 ```
@@ -291,13 +310,13 @@ it('localDate uses local zone near midnight', () =>
 - Produces:
   - `gradeWords.json`: `{ "1": string[], …, "8": string[] }`, ≥150 kid-appropriate words per grade, written by the implementer from general knowledge of grade-level spelling (no copyrighted list copied wholesale).
   - `currentList(lists: WordList[], today: string): WordList | null` — earliest list with `testDate ≥ today`; else the most recently created list with no `testDate`; else `null`.
-  - `selectSessionWords(input: { lists: WordList[]; attempts: Attempt[]; today: string; generatedLevel: number; size?: number /*10*/; rng: Rng }): SessionWord[]` where `SessionWord = { word: string /*display casing*/; role: 'current' | 'review' | 'generated'; listId: string | null; state: WordState }`.
-  - `adaptGeneratedLevel(level: number, recentGenerated: Attempt[]): number` — over the last 20 non-practice generated attempts: accuracy (clean ÷ total) ≥ 0.9 → `level+1`; ≤ 0.6 → `level-1`; clamp 1–8; fewer than 10 attempts → unchanged.
+  - `selectSessionWords(input: { lists: WordList[]; attempts: AttemptLike[]; today: string; generatedLevel: number; size?: number /*10*/; mode?: 'normal' | 'extra'; usable?: (word: string) => boolean; rng: Rng }): SessionWord[]` — `usable` excludes words the chosen game can't make a puzzle from *before* filling, so sessions backfill instead of shrinking. `mode: 'extra'` = generated pool only ("Practice extra words"). where `SessionWord = { word: string /*display casing*/; role: 'current' | 'review' | 'generated'; listId: string | null; state: WordState }`.
+  - `adaptGeneratedLevel(level: number, recentGenerated: AttemptLike[]): number` (callers pass attempts with `listId === null`) — over the last 20 non-practice generated attempts: accuracy (clean ÷ total) ≥ 0.9 → `level+1`; ≤ 0.6 → `level-1`; clamp 1–8; fewer than 10 attempts → unchanged.
 
 Selection algorithm (size N=10):
-1. `cur = currentList(...)`. Current slots = `round(N*0.7)`. Fill from `cur.words` by tier: `tricky`, `new`, `learning`, `mastered`; random order within a tier.
+1. `cur = currentList(...)`. Current slots = `round(N*0.7)`. Fill from `cur.words` by tier: `tricky`, `new`, `learning`, then `mastered` — but if ≥80% of `cur` is mastered, leftover current slots go to generated words instead of mastered ones.
 2. Review slots = remaining. Candidates: words from all other lists. Order: `tricky` first, then `learning`/`mastered` by oldest last-attempt; random tiebreak.
-3. If `cur` is null, or ≥80% of `cur` words are mastered, or slots remain unfilled: fill from `gradeWords[generatedLevel]`, preferring generated words not mastered.
+3. Any slots still empty (no `cur`, short list, the 80% rule, or `usable` exclusions): fill from `gradeWords[generatedLevel]`, preferring generated words not mastered; then from adjacent levels if still short.
 4. No duplicates by `normalizeWord`. Final order shuffled.
 
 - [ ] **Step 1: Write the failing tests**
@@ -310,7 +329,9 @@ it('fills from generated pool when there are no lists', () => { const s = select
 it('fills from generated pool when the list has 2 words', () => expect(select({ lists:[twoWordList], ... })).toHaveLength(10));
 it('never duplicates a word across roles', () => { const s = select({ lists: [overlappingLists], ... }); expect(new Set(s.map(w => normalizeWord(w.word))).size).toBe(s.length); });
 it('adapts level up at 90% and down at 60%, clamped', () => { expect(adaptGeneratedLevel(3, nClean(18,2))).toBe(4); expect(adaptGeneratedLevel(1, nClean(5,15))).toBe(1); });
-it('every grade has ≥150 words and none are blocked', () => …);
+it('every grade has ≥150 words and none are isInappropriateWord', () => …);
+it('respects usable and still returns 10', () => expect(select({ ..., usable: w => w.length > 3 }).every(w => w.word.length > 3)).toBe(true));
+it('extra mode returns only generated words', () => expect(select({ ..., mode: 'extra' }).every(w => w.role === 'generated')).toBe(true));
 ```
 
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** all engine tests → PASS (corpus test now uses gradeWords).
@@ -327,11 +348,12 @@ it('every grade has ≥150 words and none are blocked', () => …);
   - `scoreAnswer(a: { kind: AttemptKind; ms: number | null; timerOn: boolean }): number` — `clean` 10, `hinted` 5, `practice` 3, `miss` 0; speed bonus only when `timerOn` and `kind==='clean'`: `ms ≤ 5000` → +5, `ms ≤ 10000` → +2.
   - `computeStreak(sessionDates: string[], today: string): { current: number; best: number }` — consecutive distinct dates ending at `today` or yesterday.
   - `BADGES: readonly BadgeDef[]`, `BadgeDef = { id: string; name: string; emoji: string; description: string; progress(stats: Stats): { value: number; goal: number } }`
+  - `starsFor(a: { kind: AttemptKind; spotFix?: boolean }): number` — 1 star per `clean` answer, +1 more when it's a Spot the Misspelling fix. Both games earn stars.
   - `Stats = { sessions: number; streakBest: number; mastered: number; comebacks: number; stars: number; trickySessions: number }`
   - `computeStats(attempts: Attempt[], sessions: Session[], today: string): Stats` — derives every `Stats` field from records (comebacks via replaying each word's attempts in `createdAt` order through `deriveWordState`).
   - `evaluateBadges(stats: Stats, earned: Set<string>): string[]` — newly earned ids.
 
-Badge set (id → goal): `first-kick` sessions 1; `streak-3`, `streak-7`, `streak-master` (streakBest 10), `streak-30`; `mastered-10`, `-25`, `-50`, `-100`; `comeback` (comebacks 1), `comeback-10`; `stars-10`, `stars-50`; `tricky-tamer` (trickySessions 5). A *comeback* = a word that was `tricky` at some point and is now `mastered`. A *tricky session* = a completed session where ≥3 words started as `tricky`. Names/emoji are the implementer's call; include a few with skate 🛹, fishing 🎣, and art 🎨 themes.
+Badge set (id → goal): `first-kick` sessions 1; `streak-3`, `streak-7`, `streak-master` (streakBest 10), `streak-30`; `mastered-10`, `-25`, `-50`, `-100`; `comeback` (comebacks 1), `comeback-10`; `stars-50`, `stars-250`; `tricky-tamer` (trickySessions 5). A *comeback* = a word that was `tricky` at some point and is now `mastered`. A *tricky session* = a completed session with `trickyCount ≥ 3` (stored on the session by Task 12). `stars` = sum of `session.stars`. Names/emoji are the implementer's call; include a few with skate 🛹, fishing 🎣, and art 🎨 themes.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -372,7 +394,7 @@ interface Repo {
   saveProfile(p: Profile): Promise<void>;           // upsert
   deleteProfile(id: string): Promise<void>;
   listLists(profileId: string): Promise<WordList[]>;
-  saveList(l: WordList): Promise<void>;             // upsert list + replace words
+  saveList(l: WordList): Promise<void>;             // upsert (words array included)
   deleteList(id: string): Promise<void>;
   listAttempts(profileId: string): Promise<Attempt[]>;
   addAttempts(a: Attempt[]): Promise<void>;         // idempotent by id
@@ -387,17 +409,16 @@ interface Repo {
 
 Schema (all tables have `owner uuid not null default auth.uid()` and RLS `owner = auth.uid()` for select/insert/update/delete):
 - `profiles(id uuid pk, name text, grade int check 1–8, generated_level int, pin_hash text null, timer_on bool, theme text, created_at timestamptz)`
-- `word_lists(id uuid pk, profile_id uuid fk on delete cascade, name text, test_date date null, source text check in ('school','parent','teacher','other'), author text null, created_at timestamptz)` — `author` is the hook for future teacher accounts.
-- `list_words(list_id uuid fk on delete cascade, position int, word text, pk(list_id, position))`, check `(select count(*) …) ≤ 100` enforced in app and via a trigger.
-- `attempts(id uuid pk, profile_id uuid fk, word text, list_id uuid null, game text, kind text, ms int null, local_date date, created_at timestamptz)`
-- `sessions(id uuid pk, profile_id uuid fk, game text, started_at, completed_at null, local_date date, points int, stars int)`
+- `word_lists(id uuid pk, profile_id uuid fk on delete cascade, name text, test_date date null, source text check in ('school','parent','teacher','other'), author text null, words text[] not null check (cardinality(words) <= 100), created_at timestamptz)` — one atomic upsert per save; `author` is the hook for future teacher accounts.
+- `attempts(id uuid pk, profile_id uuid fk, session_id uuid, word text, list_id uuid null, game text, kind text, ms int null, local_date date, created_at timestamptz)`
+- `sessions(id uuid pk, profile_id uuid fk, game text, mode text, started_at, completed_at null, local_date date, points int, stars int, tricky_count int)`
 - `awards(profile_id uuid fk, badge_id text, earned_at timestamptz, pk(profile_id, badge_id))`
 - `parent_settings(owner uuid pk, pin_hash text)`
 
-`docs/setup.md` adds, in plain steps: create a free Supabase project, run the migration in the SQL editor, turn **off** "Allow new users to sign up", invite the parent email, enable email magic links with Site URL = the Vercel production URL and `http://localhost:5173` as an extra redirect URL, copy the project URL + anon key into Vercel env vars and `.env.local`.
+`docs/setup.md` adds, in plain steps: create a free Supabase project, run the migration in the SQL editor, turn **off** "Allow new users to sign up", invite the parent email, edit the "Magic Link" email template to show the 6-digit code (`{{ .Token }}`), set Site URL to the Vercel production URL, copy the project URL + anon key into Vercel env vars and `.env.local`.
 
 - [ ] **Step 1: Write the failing tests** against `createMemoryRepo()`: save/list a profile; `saveList` replaces words; `addAttempts` with the same id twice stores one; `addAwards` duplicate stores one; deleting a profile removes its lists, attempts, sessions, awards.
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** memory repo, then Supabase repo with the same behavior (upserts with `onConflict`). **Step 4: Run** → PASS.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** memory repo, then Supabase repo with the same behavior (`upsert` with `onConflict`; `ignoreDuplicates: true` for attempts and awards). **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(data): schema and repo layer`
 
 > **Parent action needed before Task 10 can be tried for real:** finish the Supabase settings per `docs/setup.md` (project already created 2026-10-28). All automated tests use the memory repo and don't need it.
@@ -412,9 +433,9 @@ Schema (all tables have `owner uuid not null default auth.uid()` and RLS `owner 
 - Consumes: `Repo`
 - Produces: `useRepo(): Repo`, `useActiveProfile(): { profile: Profile | null; select(id: string): void; clear(): void }` (active profile id persisted in `localStorage` per device, try/catch wrapped). `hashPin(pin: string, salt: string): Promise<string>` (SHA-256 via `crypto.subtle`, salt = profile id or owner id). Routes: `/signin`, `/profiles`, `/kid/:id/*`.
 
-Behavior: SignIn = email field → Supabase magic link; no password, no sign-up wording. Profiles = big avatar tiles; tapping a PIN-protected profile opens `PinPad` (4 digits, 3 wrong tries → 30 s cooldown). A "Parent" button at the bottom leads to Task 11.
+Behavior: SignIn = email field → `signInWithOtp({ email, options: { shouldCreateUser: false } })` → 6-digit code field → `verifyOtp({ email, token, type: 'email' })`. A code (not a link) is required because on iPad a tapped link opens Safari, whose storage the home-screen app can't see. No password, no sign-up wording; an unknown email shows "This email isn't set up for SpellKick." Profiles = big avatar tiles; tapping a PIN-protected profile opens `PinPad` (4 digits, 3 wrong tries → 30 s cooldown). A "Parent" button at the bottom leads to Task 11.
 
-- [ ] **Step 1: Write the failing tests** (memory repo injected): shows each profile name; tapping a profile without PIN routes to `/kid/:id`; with PIN, wrong PIN shows "Try again" and does not route, right PIN routes; `hashPin('1234','a') !== hashPin('1234','b')`.
+- [ ] **Step 1: Write the failing tests** (memory repo + stubbed auth client injected): SignIn calls `signInWithOtp` with `shouldCreateUser: false` then `verifyOtp` with the typed code; shows each profile name; tapping a profile without PIN routes to `/kid/:id`; with PIN, wrong PIN shows "Try again" and does not route, right PIN routes; `hashPin('1234','a') !== hashPin('1234','b')`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat: sign-in and kid profile picker`
 
@@ -447,10 +468,10 @@ Behavior:
 **Interfaces:**
 - Consumes: `selectSessionWords`, `currentList`, `summarize`, `scoreAnswer`, `computeStreak`, `computeStats`, `evaluateBadges`, `adaptGeneratedLevel`, `Repo`
 - Produces:
-  - `useSession(game: GameId): { words: SessionWord[]; index: number; current: SessionWord; record(r: { word: string; kind: AttemptKind; ms: number | null; star?: boolean }): void; next(): void; done: boolean; summary: SessionSummary }` — buffers attempts and writes them through the outbox (Task 15; until then directly to `repo.addAttempts`) as each answer is recorded; on finish saves the `Session`, evaluates and saves new awards, updates `generatedLevel` via `adaptGeneratedLevel`.
+  - `useSession(game: GameId, opts?: { mode?: 'normal' | 'extra'; rng?: Rng; now?: () => Date }): { words: SessionWord[]; index: number; current: SessionWord; record(r: { word: string; kind: AttemptKind; ms: number | null; spotFix?: boolean }): void; skip(): void; next(): void; done: boolean; loading: boolean; summary: SessionSummary }` — stores `normalizeWord(word)` on the attempt, writes each attempt via `repo.addAttempts` as it's recorded (Task 15 makes the repo offline-safe). Before selecting words it builds a game-specific `usable` (Scramble: `makeScramble(w) !== null`; Spot: awaits `loadDictionary()` then `makeMisspelling(w) !== null`) and passes it to `selectSessionWords`. Sets `trickyCount` from word states at start. On finish saves the `Session`, evaluates and saves new awards, updates `generatedLevel` via `adaptGeneratedLevel` (failure here must not block the done screen).
   - `SessionSummary = { masteredToday: string[]; stillTricky: string[]; points: number; stars: number; streak: { current: number; best: number; isNewBest: boolean }; newBadges: BadgeDef[] }`
   - `<Timer running onTick />` shows elapsed seconds subtly; hidden when the profile's timer is off.
-  - Game components receive `{ word: SessionWord; allWords: string[]; onResult(r): void; timerOn: boolean }`.
+  - Game components receive `{ word: SessionWord; allWords: string[] /*every word in the kid's lists, display casing*/; fallbackWords: string[] /*gradeWords at the kid's generatedLevel*/; onResult(r): void; onSkip(): void; timerOn: boolean }`.
 
 KidHome (matches the approved mockup): name, next test + countdown in days (hidden when no date), current list progress bar "X of Y mastered", pills for mastered/tricky/review counts, game buttons (Scramble, Spot the Misspelling, Practice extra words → generated-only session), Awards link.
 
@@ -470,9 +491,9 @@ SessionDone (matches mockup): big 🔥 streak with "new personal best!" when app
 - Consumes: game component props (Task 12), `makeScramble`, `seededRng`
 - Produces: `speak(word: string): void` (Web Speech API, `en-US`, rate 0.85; no-op if unsupported, and the "Hear it" button is hidden then).
 
-Behavior (layout A, approved): progress "4 of 10"; scrambled tiles; tapping a tile moves it to the next empty slot, tapping a filled slot returns it; "Type instead" switches to a text input; **Check** compares case-insensitively ignoring the stripped punctuation (`don't` ↔ `DONT`). Hints: first tap reveals and locks the first letter; second tap speaks the word. Correct with no hints → `clean`; with hints → `hinted`; wrong → shake, one retry, second wrong → `miss` and show the correct spelling for 2 s. If `makeScramble` returns `null`, skip the word without recording.
+Behavior (layout A, approved): progress "4 of 10"; scrambled tiles; tapping a tile moves it to the next empty slot, tapping a filled slot returns it; "Type instead" switches to a text input; **Check** compares case-insensitively ignoring the stripped punctuation (`don't` ↔ `DONT`). Hints: first tap reveals and locks the first letter; second tap speaks the word (or, if speech is unavailable, reveals the next letter). Correct with no hints → `clean`; with hints → `hinted`; wrong → shake, one retry, second wrong → `miss` and show the correct spelling for 2 s. If `makeScramble` returns `null`, skip the word without recording.
 
-- [ ] **Step 1: Write the failing tests**: tiles contain exactly the word's letters; tapping tiles in correct order then Check calls `onResult({kind:'clean'})`; using Hint once then solving → `hinted`; two wrong checks → `miss`; typing mode accepts "Necessary" for "necessary"; unscramblable word calls skip.
+- [ ] **Step 1: Write the failing tests**: tiles contain exactly the word's letters; tapping tiles in correct order then Check calls `onResult({kind:'clean'})`; using Hint once then solving → `hinted`; two wrong checks → `miss`; typing mode accepts "Necessary" for "necessary"; unscramblable word calls `onSkip`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat: scramble game`
 
@@ -485,29 +506,31 @@ Behavior (layout A, approved): progress "4 of 10"; scrambled tiles; tapping a ti
 **Interfaces:**
 - Consumes: game component props, `makeMisspelling`, `loadDictionary`, `seededRng`
 
-Behavior (approved layout): 4 choices — the misspelled target plus 3 correct distractors drawn from `allWords` (the session's and kid's other words; fall back to `gradeWords` at the kid's level if fewer than 3), shuffled. Tap the wrong one: correct tap → record `practice`, then a text box "Fix it for a bonus ⭐": correct typed fix → record `clean` with `star: true`; wrong or skipped fix → nothing further. Wrong tap → record `miss` for the target, highlight the real misspelling, show the correct spelling. Distractors get no attempts. Show a loading state while the dictionary loads; if `makeMisspelling` returns `null`, skip the word.
+Behavior (approved layout): 4 choices — the misspelled target plus 3 correct distractors drawn from `allWords`, topped up from `fallbackWords` if fewer than 3, shuffled. Tap the wrong one: correct tap → record `practice`, then a text box "Fix it for a bonus ⭐": correct typed fix → record `clean` with `star: true`; wrong or skipped fix → nothing further. Wrong tap → record `miss` for the target, highlight the real misspelling, show the correct spelling. Distractors get no attempts. Show a loading state while the dictionary loads; if `makeMisspelling` returns `null`, call `onSkip`.
 
-- [ ] **Step 1: Write the failing tests** (stub dictionary): exactly one choice differs from its source word; correct tap records `practice`; correct fix records `clean` with star; wrong tap records `miss` for the target; distractors come from the grade pool when `allWords` has 1 entry.
+- [ ] **Step 1: Write the failing tests** (stub dictionary): exactly one choice differs from its source word; correct tap records `practice`; correct fix records `clean` with star; wrong tap records `miss` for the target; distractors come from `fallbackWords` when `allWords` has 1 entry.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat: spot the misspelling game`
 
 ---
 
-### Task 15: Awards shelf, offline outbox, and installability
+### Task 15: Awards shelf, offline support, and installability
 
-**Files:** Create `src/screens/Awards/`, `src/data/outbox.ts`; Modify `src/screens/Session/useSession.ts`, `vite.config.ts`; Test `tests/data/outbox.test.ts`, `tests/screens/Awards.test.tsx`
+**Files:** Create `src/screens/Awards/`, `src/data/offlineRepo.ts`; Modify `src/app/RepoProvider.tsx`, `vite.config.ts`; Test `tests/data/offlineRepo.test.ts`, `tests/screens/Awards.test.tsx`
 
 **Interfaces:**
 - Consumes: `BADGES`, `Repo`
-- Produces: `createOutbox(repo: Repo, store: KeyValueStore): { addAttempts(a: Attempt[]): Promise<void>; saveSession(s: Session): Promise<void>; addAwards(a: Award[]): Promise<void>; flush(): Promise<void>; pending(): Promise<number> }` — writes go to `idb-keyval` first, then `flush()` sends to the repo; failures stay queued; flush on `online` event and app start. Reads merge repo results with pending items by id.
+- Produces:
+  - `type KeyValueStore = { get(k: string): Promise<unknown>; set(k: string, v: unknown): Promise<void>; del(k: string): Promise<void> }` (prod: `idb-keyval`; tests: a Map).
+  - `createOfflineRepo(inner: Repo, store: KeyValueStore): Repo & { flush(): Promise<void>; pending(): Promise<number> }` — every successful read is cached; a failed read returns the cache merged with pending writes by id. Writes (`addAttempts`, `saveSession`, `addAwards`, `saveProfile`) queue first, then flush; failures stay queued; flush on the `online` event and app start. Parent-area writes (`saveList`, `deleteList`, `deleteProfile`, PIN) go straight through and show an error offline. `RepoProvider` wraps the Supabase repo with it.
 
 Awards screen (matches mockup): earned count, badge grid (locked badges greyed), "Next up" badge with progress bar from `progress(stats)`.
 
-PWA: `vite-plugin-pwa` `registerType: 'autoUpdate'`, precache app shell + `dictionary.txt`; Supabase calls network-only.
+PWA: `vite-plugin-pwa` `registerType: 'autoUpdate'`, `workbox.globPatterns` must include `**/*.{js,css,html,svg,png,txt}` so `dictionary.txt` is precached (confirm it is under the 2 MB `maximumFileSizeToCacheInBytes` default); Supabase calls network-only.
 
-- [ ] **Step 1: Write the failing tests**: outbox with a repo that throws keeps 3 attempts pending, then flushes all 3 when the repo recovers; flushing twice doesn't duplicate (repo idempotency); attempts from two outboxes (two devices) on the same day both appear in `listAttempts` and `deriveWordState` counts the day once; Awards shows locked state for unearned badges and "6 of 10" for `streak-master` with streakBest 6.
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement**; route `useSession` writes through the outbox. **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat: awards shelf and offline outbox`
+- [ ] **Step 1: Write the failing tests**: with an inner repo that throws, `listLists` returns the last cached result; offline repo keeps 3 attempts pending, then flushes all 3 when the repo recovers; flushing twice doesn't duplicate (repo idempotency); attempts from two offline repos (two devices) on the same day both appear in `listAttempts` and `deriveWordState` counts the day once; Awards shows locked state for unearned badges and "6 of 10" for `streak-master` with streakBest 6.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement**; wrap the Supabase repo in `RepoProvider`. **Step 4: Run** → PASS.
+- [ ] **Step 5: Commit** `feat: awards shelf and offline support`
 
 ---
 
