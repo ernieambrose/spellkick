@@ -114,29 +114,42 @@ describe('Scramble', () => {
     expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'hinted' });
   });
 
-  it('the second hint speaks the word when speech is available', () => {
+  it('Hear it speaks the word in US English and does not count as a hint', () => {
     const { speak, cancel } = mockSpeech();
     const { onResult } = setup('necessary');
-    fireEvent.click(screen.getByRole('button', { name: 'Hint' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hear it' }));
     expect(cancel).toHaveBeenCalled();
     expect(speak).toHaveBeenCalledOnce();
     expect(speak.mock.calls[0][0]).toMatchObject({ text: 'necessary', lang: 'en-US', rate: 0.85 });
-    expect(answer().getAllByRole('button')[1]).toHaveTextContent('');
+    expect(answer().getAllByRole('button')[0]).toHaveTextContent('');
+    solve('NECESSARY');
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    act(() => vi.advanceTimersByTime(600));
+    expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'clean' });
+  });
+
+  it('Hear it is hidden when speech is unsupported', () => {
+    vi.stubGlobal('speechSynthesis', undefined);
+    vi.stubGlobal('SpeechSynthesisUtterance', undefined);
+    setup('necessary');
+    expect(screen.queryByRole('button', { name: 'Hear it' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hint' })).toBeInTheDocument();
+  });
+
+  it('Hint twice locks two letters, then is disabled, and solving reports hinted', () => {
+    mockSpeech();
+    const { onResult } = setup('necessary');
+    const hint = screen.getByRole('button', { name: 'Hint' });
+    fireEvent.click(hint);
+    fireEvent.click(hint);
+    const slots = answer().getAllByRole('button');
+    expect(slots[0]).toHaveTextContent('N');
+    expect(slots[1]).toHaveTextContent('E');
+    expect(hint).toBeDisabled();
     solve('NECESSARY');
     fireEvent.click(screen.getByRole('button', { name: 'Check' }));
     act(() => vi.advanceTimersByTime(600));
     expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'hinted' });
-  });
-
-  it('without speech, Hear it is hidden and the second hint reveals the next letter', () => {
-    setup('necessary');
-    fireEvent.click(screen.getByRole('button', { name: 'Hint' }));
-    expect(screen.queryByRole('button', { name: 'Hear it' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Next letter' }));
-    const slots = answer().getAllByRole('button');
-    expect(slots[0]).toHaveTextContent('N');
-    expect(slots[1]).toHaveTextContent('E');
   });
 
   it('a wrong check clears the slots for one retry; a second wrong shows the word, then miss', () => {

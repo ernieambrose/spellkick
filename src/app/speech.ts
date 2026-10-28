@@ -1,6 +1,6 @@
 /** True when the browser can read a word aloud (Web Speech API). */
 export function speechSupported(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+  return typeof window !== 'undefined' && !!window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined';
 }
 
 /** Say a word in US English, a little slower than normal. No-op without speech support. */

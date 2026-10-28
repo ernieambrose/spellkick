@@ -8,6 +8,7 @@ import type { GameProps } from '../Session/games';
 const SUCCESS_MS = 600;
 const REVEAL_MS = 2000;
 const SHAKE_MS = 400;
+const MAX_HINTS = 2; // each hint locks one more letter; a scramble always has at least 3
 
 // Uppercase with spaces, hyphens and apostrophes removed: the letters a scramble is made of.
 const letters = (s: string) => s.toUpperCase().replace(/[\s'’-]/g, '');
@@ -45,7 +46,6 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const [typed, setTyped] = useState('');
   const [typing, setTyping] = useState(false);
   const [locked, setLocked] = useState(0);
-  const [hints, setHints] = useState(0);
   const [wrong, setWrong] = useState(0);
   const [shaking, setShaking] = useState(false);
   const [status, setStatus] = useState<Status>('playing');
@@ -67,16 +67,10 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const later = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
   const playing = status === 'playing';
 
-  function revealNext() {
+  function hint() {
+    if (locked >= MAX_HINTS) return;
     setSlots((s) => lockSlot(s, tiles!, locked, target[locked]));
     setLocked(locked + 1);
-  }
-
-  function hint() {
-    if (hints === 0) revealNext();
-    else if (canSpeak) speak(word.word);
-    else if (hints === 1) revealNext();
-    setHints(hints + 1);
   }
 
   function tapTile(tile: number) {
@@ -97,7 +91,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   function check(answer: string) {
     if (letters(answer) === target) {
       setStatus('correct');
-      later(SUCCESS_MS, () => onResult({ kind: hints > 0 ? 'hinted' : 'clean' }));
+      later(SUCCESS_MS, () => onResult({ kind: locked > 0 ? 'hinted' : 'clean' }));
     } else if (wrong === 0) {
       setWrong(1);
       setShaking(true);
@@ -118,8 +112,6 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   };
 
   const pill = 'min-h-12 rounded-full px-6 text-lg font-semibold transition active:scale-95 disabled:opacity-40';
-  const hintLabel = hints === 0 ? 'Hint' : canSpeak ? 'Hear it' : 'Next letter';
-  const showHint = hints === 0 || canSpeak || hints === 1;
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -183,11 +175,19 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
       </div>
 
       <div className="flex flex-wrap justify-center gap-3">
-        {showHint && (
-          <button type="button" disabled={!playing} onClick={hint} className={`${pill} bg-review-bg text-review-text`}>
-            {hintLabel}
+        {canSpeak && (
+          <button type="button" onClick={() => speak(word.word)} className={`${pill} bg-review-bg text-review-text`}>
+            <span aria-hidden="true">🔊 </span>Hear it
           </button>
         )}
+        <button
+          type="button"
+          disabled={!playing || locked >= MAX_HINTS}
+          onClick={hint}
+          className={`${pill} bg-tricky-bg text-tricky-text`}
+        >
+          <span aria-hidden="true">💡 </span>Hint
+        </button>
         <button
           type="button"
           disabled={!playing}
