@@ -72,22 +72,32 @@ create index attempts_profile_id_idx on public.attempts (profile_id);
 create index sessions_profile_id_idx on public.sessions (profile_id);
 
 -- Row-level security: owner = auth.uid() for select, insert, update, delete on every table.
+-- Child tables (rows with a profile_id) must also point at a profile this parent owns
+-- when inserting or updating, so no one can attach rows to another family's profile.
 do $$
 declare
   t text;
+  write_check text;
 begin
   foreach t in array array['profiles', 'word_lists', 'attempts', 'sessions', 'awards', 'parent_settings']
   loop
+    if t in ('profiles', 'parent_settings') then
+      write_check := 'owner = auth.uid()';
+    else
+      write_check := 'owner = auth.uid() and exists (select 1 from public.profiles p '
+        || 'where p.id = profile_id and p.owner = auth.uid())';
+    end if;
+
     execute format('alter table public.%I enable row level security', t);
     execute format(
       'create policy %I on public.%I for select to authenticated using (owner = auth.uid())',
       t || '_select', t);
     execute format(
-      'create policy %I on public.%I for insert to authenticated with check (owner = auth.uid())',
-      t || '_insert', t);
+      'create policy %I on public.%I for insert to authenticated with check (%s)',
+      t || '_insert', t, write_check);
     execute format(
-      'create policy %I on public.%I for update to authenticated using (owner = auth.uid()) with check (owner = auth.uid())',
-      t || '_update', t);
+      'create policy %I on public.%I for update to authenticated using (owner = auth.uid()) with check (%s)',
+      t || '_update', t, write_check);
     execute format(
       'create policy %I on public.%I for delete to authenticated using (owner = auth.uid())',
       t || '_delete', t);

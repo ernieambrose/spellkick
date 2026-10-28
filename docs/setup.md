@@ -38,21 +38,21 @@ SpellKick is family-only, so nobody should be able to create their own account.
 2. Turn **off** "Allow new users to sign up".
 3. Click **Save**.
 
-### 3. Invite yourself (the parent)
+### 3. Set the Site URL
 
-1. Click **Authentication**, then **Users**.
-2. Click **Add user**, then **Invite user**.
-3. Type the parent email address and click **Invite**.
+1. Click **Authentication**, then **URL Configuration**.
+2. Set **Site URL** to the app's Vercel production address, for example `https://spellkick.vercel.app` (use the address Vercel shows on your project page).
+3. Click **Save**.
 
-Repeat for a second parent if you like. Each invited email can sign in; nobody else can.
+Do this before inviting anyone, because the invite email links to this address.
 
-### 4. Make the sign-in email show a 6-digit code
+### 4. Make the sign-in emails show a 6-digit code
 
-The app asks for a 6-digit code from your email, which works better on a phone or iPad than a link.
+The app asks for a 6-digit code from your email, which works better on a phone or iPad than a link. Supabase sends one of two emails when you sign in: **Magic Link** for a confirmed account, and **Confirm signup** for an account that has not been confirmed yet. Put the code in both so it always shows up.
 
 1. Click **Authentication**, then **Emails** (on some versions, **Email Templates**).
-2. Open the **Magic Link** template.
-3. Replace the message body with something like this, and click **Save**:
+2. Open the **Magic Link** template, replace the message body with the sample below, and click **Save**.
+3. Open the **Confirm signup** template, replace its body with the same sample, and click **Save**.
 
    ```html
    <h2>Your SpellKick sign-in code</h2>
@@ -63,27 +63,34 @@ The app asks for a 6-digit code from your email, which works better on a phone o
 
    The important part is `{{ .Token }}`. That is where the code appears. Keep it exactly as written, including the braces and the dot.
 
-### 5. Set the Site URL
+4. Check the code length: under **Authentication**, open the **Email** provider settings (in **Sign In / Providers**, click **Email**) and make sure **Email OTP length** is **6**. Change it to 6 and save if it shows something else.
 
-1. Click **Authentication**, then **URL Configuration**.
-2. Set **Site URL** to the app's Vercel production address, for example `https://spellkick.vercel.app` (use the address Vercel shows on your project page).
-3. Click **Save**.
+### 5. Invite yourself (the parent)
+
+**About email limits.** Supabase's built-in email sender only delivers to people who are members of your Supabase organization's team, and only a few emails per hour. The simplest path is to invite the same email address you use to sign in to Supabase. That address is already on the team, so it just works.
+
+To add a second parent, either add their email to the organization team first (click your organization name, then **Team**, then **Invite**), or set up your own email sender under **Project Settings**, then **Authentication**, then **SMTP Settings**. If a code does not arrive, wait a bit; you may have hit the hourly limit.
+
+1. Click **Authentication**, then **Users**.
+2. Click **Add user**, then **Invite user**.
+3. Type the parent email address and click **Invite**.
+4. Open the invite email and click its link once. That accepts the invite and confirms the account. After this, signing in to SpellKick sends the 6-digit code.
 
 ### 6. Copy the two keys into Vercel and your computer
 
 1. Click **Project Settings** (the gear icon), then **Data API** (or **API**). Copy the **Project URL**.
-2. Then open **API Keys** and copy the **anon** **public** key.
+2. Then open **API Keys** and copy the **Publishable key** (it starts with `sb_publishable_`). Older projects show an **anon public** key instead, sometimes under a **Legacy** tab; use that if there is no Publishable key.
 3. In Vercel, open the project, then **Settings**, then **Environment Variables**. Add (or update) these two, ticking both **Production** and **Preview**:
    - `VITE_SUPABASE_URL` = the Project URL
-   - `VITE_SUPABASE_ANON_KEY` = the anon public key
+   - `VITE_SUPABASE_ANON_KEY` = the Publishable key (older projects: the anon public key)
 4. Redeploy: in Vercel, open **Deployments**, click the three dots on the latest one, and choose **Redeploy**.
 5. For running the app on your own computer, create a file named `.env.local` in the top folder of the repository containing:
 
    ```
    VITE_SUPABASE_URL=paste-the-project-url-here
-   VITE_SUPABASE_ANON_KEY=paste-the-anon-key-here
+   VITE_SUPABASE_ANON_KEY=paste-the-publishable-key-here
    ```
 
    This file is ignored by git, so it never gets uploaded.
 
-These two values are safe to be public; the database rules only let a signed-in parent see their own family's data. Never copy the **service_role** key anywhere; that one is a real secret.
+These two values are safe to be public; the database rules only let a signed-in parent see their own family's data. Never use the **Secret key** (or the older **service_role** key) anywhere: not in Vercel, not in `.env.local`, not in the code. That one is a real password for the whole database.

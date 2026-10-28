@@ -16,6 +16,7 @@ import {
   type SessionRow,
   type WordListRow,
 } from './mappers';
+import { fetchAllPages } from './paging';
 import type { Repo } from './repo';
 
 // Row-level security limits every query to the signed-in parent's rows (owner = auth.uid()).
@@ -34,8 +35,10 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
 
   return {
     async listProfiles() {
-      const rows = check(await db.from('profiles').select('*').order('created_at'));
-      return (rows as ProfileRow[]).map(profileFromRow);
+      const rows = await fetchAllPages<ProfileRow>((from, to) =>
+        db.from('profiles').select('*').order('created_at').order('id').range(from, to),
+      );
+      return rows.map(profileFromRow);
     },
     async saveProfile(p) {
       check(await db.from('profiles').upsert(profileToRow(p), { onConflict: 'id' }));
@@ -44,8 +47,10 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       check(await db.from('profiles').delete().eq('id', id));
     },
     async listLists(profileId) {
-      const rows = check(await db.from('word_lists').select('*').eq('profile_id', profileId).order('created_at'));
-      return (rows as WordListRow[]).map(listFromRow);
+      const rows = await fetchAllPages<WordListRow>((from, to) =>
+        db.from('word_lists').select('*').eq('profile_id', profileId).order('created_at').order('id').range(from, to),
+      );
+      return rows.map(listFromRow);
     },
     async saveList(l) {
       check(await db.from('word_lists').upsert(listToRow(l), { onConflict: 'id' }));
@@ -54,23 +59,29 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       check(await db.from('word_lists').delete().eq('id', id));
     },
     async listAttempts(profileId) {
-      const rows = check(await db.from('attempts').select('*').eq('profile_id', profileId).order('created_at'));
-      return (rows as AttemptRow[]).map(attemptFromRow);
+      const rows = await fetchAllPages<AttemptRow>((from, to) =>
+        db.from('attempts').select('*').eq('profile_id', profileId).order('created_at').order('id').range(from, to),
+      );
+      return rows.map(attemptFromRow);
     },
     async addAttempts(a) {
       if (a.length === 0) return;
       check(await db.from('attempts').upsert(a.map(attemptToRow), { onConflict: 'id', ignoreDuplicates: true }));
     },
     async listSessions(profileId) {
-      const rows = check(await db.from('sessions').select('*').eq('profile_id', profileId).order('started_at'));
-      return (rows as SessionRow[]).map(sessionFromRow);
+      const rows = await fetchAllPages<SessionRow>((from, to) =>
+        db.from('sessions').select('*').eq('profile_id', profileId).order('started_at').order('id').range(from, to),
+      );
+      return rows.map(sessionFromRow);
     },
     async saveSession(s) {
       check(await db.from('sessions').upsert(sessionToRow(s), { onConflict: 'id' }));
     },
     async listAwards(profileId) {
-      const rows = check(await db.from('awards').select('*').eq('profile_id', profileId).order('earned_at'));
-      return (rows as AwardRow[]).map(awardFromRow);
+      const rows = await fetchAllPages<AwardRow>((from, to) =>
+        db.from('awards').select('*').eq('profile_id', profileId).order('earned_at').order('badge_id').range(from, to),
+      );
+      return rows.map(awardFromRow);
     },
     async addAwards(a) {
       if (a.length === 0) return;
