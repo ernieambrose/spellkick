@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "oxlint",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "build:dict": "node scripts/build-dictionary.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -31,6 +32,7 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "wordlist-english": "^1.2.1"
   }
 }

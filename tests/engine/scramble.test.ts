@@ -18,7 +18,8 @@ describe('makeScramble', () => {
   it('never returns a blocked arrangement for separate', () => {
     for (let i = 0; i < 2000; i++) {
       const s = makeScramble('separate', seededRng(i));
-      expect(s && containsBlocked(s)).toBeFalsy();
+      expect(s).not.toBeNull();
+      expect(containsBlocked(s!)).toBe(false);
     }
   });
   it('is deterministic for a seed', () =>
