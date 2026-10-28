@@ -6,13 +6,16 @@ import { ProfileProvider } from './app/ProfileProvider';
 import { useActiveProfile } from './app/profileContext';
 import { RepoProvider } from './app/RepoProvider';
 import type { Repo } from './data/repo';
-import { KidPlaceholder } from './screens/Kid/KidPlaceholder';
+import { AwardsPlaceholder } from './screens/KidHome/AwardsPlaceholder';
+import { KidHome } from './screens/KidHome/KidHome';
+import { KidRoute } from './screens/KidHome/KidRoute';
 import { ListEditor } from './screens/Parent/ListEditor';
 import { ParentGate } from './screens/Parent/ParentGate';
 import { ParentHome } from './screens/Parent/ParentHome';
 import { ProfileEditor } from './screens/Parent/ProfileEditor';
 import { ProgressView } from './screens/Parent/ProgressView';
 import { Profiles } from './screens/Profiles/Profiles';
+import { SessionShell } from './screens/Session/SessionShell';
 import { SignIn } from './screens/SignIn/SignIn';
 
 function RequireAuth() {
@@ -43,7 +46,11 @@ export default function App({ repo, authClient }: AppProps) {
               <Route element={<RequireAuth />}>
                 <Route index element={<Home />} />
                 <Route path="/profiles" element={<Profiles />} />
-                <Route path="/kid/:id/*" element={<KidPlaceholder />} />
+                <Route path="/kid/:id" element={<KidRoute />}>
+                  <Route index element={<KidHome />} />
+                  <Route path="play/:game" element={<SessionShell />} />
+                  <Route path="awards" element={<AwardsPlaceholder />} />
+                </Route>
                 <Route path="/parent" element={<ParentGate />}>
                   <Route index element={<ParentHome />} />
                   <Route path="profile/:id" element={<ProfileEditor />} />
