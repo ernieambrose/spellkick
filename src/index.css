@@ -15,3 +15,10 @@
   --color-review-bg: #e5e8ff;
   --color-review-text: #3a45a8;
 }
+
+@layer base {
+  body {
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-900);
+  }
+}
