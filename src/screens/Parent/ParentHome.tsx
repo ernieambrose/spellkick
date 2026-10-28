@@ -6,6 +6,7 @@ import { useRepo } from '../../app/repoContext';
 import { localDate } from '../../engine/streak';
 import type { Profile, WordList } from '../../engine/types';
 import { groupLists } from './listGroups';
+import { useParentArea } from './parentArea';
 import { Card, primaryButton, secondaryButton } from './ui';
 
 interface KidLists {
@@ -18,6 +19,7 @@ export function ParentHome() {
   const { signOut } = useAuth();
   const { clear } = useActiveProfile();
   const navigate = useNavigate();
+  const { changePin } = useParentArea();
   const [kids, setKids] = useState<KidLists[] | null>(null);
   const [today, setToday] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
@@ -99,10 +101,13 @@ export function ParentHome() {
       })}
 
       {kids && (
-        <div>
-          <Link to="/parent/profile/new" className={`${secondaryButton} inline-flex`}>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/parent/profile/new" className={secondaryButton}>
             + Add kid
           </Link>
+          <button type="button" onClick={changePin} className={secondaryButton}>
+            Change parent PIN
+          </button>
         </div>
       )}
     </main>

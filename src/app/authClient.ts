@@ -13,7 +13,7 @@ export interface AuthClient {
     options: { shouldCreateUser: false };
   }): Promise<{ error: AuthError | null }>;
   verifyOtp(args: { email: string; token: string; type: 'email' }): Promise<{ error: AuthError | null }>;
-  getSession(): Promise<{ signedIn: boolean; userId?: string | null }>;
+  getSession(): Promise<{ signedIn: boolean; userId?: string | null; email?: string | null }>;
   onAuthStateChange(cb: (signedIn: boolean) => void): () => void; // returns unsubscribe
   signOut(): Promise<{ error: AuthError | null }>;
 }
@@ -24,7 +24,8 @@ export function createSupabaseAuthClient(db: SupabaseClient): AuthClient {
     verifyOtp: (args) => db.auth.verifyOtp(args),
     async getSession() {
       const { data } = await db.auth.getSession();
-      return { signedIn: data.session !== null, userId: data.session?.user.id ?? null };
+      const user = data.session?.user;
+      return { signedIn: data.session !== null, userId: user?.id ?? null, email: user?.email ?? null };
     },
     onAuthStateChange(cb) {
       const { data } = db.auth.onAuthStateChange((_event, session) => cb(session !== null));

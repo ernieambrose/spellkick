@@ -8,7 +8,7 @@ export interface AuthContextValue {
   sendCode(email: string): Promise<{ error: AuthError | null }>;
   verifyCode(email: string, token: string): Promise<{ error: AuthError | null }>;
   signOut(): Promise<void>;
-  getUserId(): Promise<string | null>; // the signed-in owner's id; null in demo mode
+  getUser(): Promise<{ id: string | null; email: string | null } | null>; // the signed-in owner; null in demo mode
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

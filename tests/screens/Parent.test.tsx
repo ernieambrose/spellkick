@@ -256,3 +256,59 @@ describe('ProgressView', () => {
     expect(screen.getByText(/Current streak/)).toHaveTextContent('1');
   });
 });
+
+describe('Forgot / change parent PIN', () => {
+  it('Forgot PIN? re-verifies by emailed code, then sets a new PIN; the old one stops working', async () => {
+    const repo = await repoWith([profile()], { pinSet: false });
+    await repo.setParentPinHash(await hashPin(PARENT_PIN, 'owner-1'));
+    const auth = stubAuth({ signedIn: true, userId: 'owner-1', email: 'mom@example.com' });
+    const user = renderAt('/parent', repo, auth);
+
+    await user.click(await screen.findByRole('button', { name: 'Forgot PIN?' }));
+    await user.click(await screen.findByRole('button', { name: 'Email me a code' }));
+    expect(auth.signInWithOtp).toHaveBeenCalledWith({ email: 'mom@example.com', options: { shouldCreateUser: false } });
+
+    auth.verifyOtp.mockResolvedValueOnce({ error: { message: 'Token has expired or is invalid' } });
+    await user.type(await screen.findByLabelText('6-digit code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Verify' }));
+    expect(await screen.findByText(/That code didn't work/)).toBeInTheDocument();
+    expect(screen.getByLabelText('6-digit code')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('6-digit code'));
+    await user.type(screen.getByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verify' }));
+    expect(auth.verifyOtp).toHaveBeenLastCalledWith({ email: 'mom@example.com', token: '123456', type: 'email' });
+
+    expect(await screen.findByText('Set a parent PIN')).toBeInTheDocument();
+    await typePin(user, '5678');
+    await screen.findByText('Enter it again');
+    await typePin(user, '5678');
+    expect(await screen.findByRole('heading', { name: 'Parent' })).toBeInTheDocument();
+
+    const stored = await repo.getParentPinHash();
+    expect(stored).toBe(await hashPin('5678', 'owner-1'));
+    expect(stored).not.toBe(await hashPin(PARENT_PIN, 'owner-1'));
+  });
+
+  it('in demo mode (no auth client), Forgot PIN? goes straight to setting a new PIN', async () => {
+    const repo = await repoWith();
+    window.history.pushState({}, '', '/parent');
+    render(<App repo={repo} authClient={null} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Forgot PIN?' }));
+    expect(await screen.findByText('Set a parent PIN')).toBeInTheDocument();
+  });
+
+  it('Change parent PIN from the parent home sets a new PIN', async () => {
+    const repo = await repoWith([profile()]);
+    const user = renderAt('/parent', repo);
+    await typePin(user, PARENT_PIN);
+    await user.click(await screen.findByRole('button', { name: 'Change parent PIN' }));
+    expect(await screen.findByText('Set a parent PIN')).toBeInTheDocument();
+    await typePin(user, '8642');
+    await screen.findByText('Enter it again');
+    await typePin(user, '8642');
+    expect(await screen.findByRole('heading', { name: 'Parent' })).toBeInTheDocument();
+    expect(await repo.getParentPinHash()).toBe(await hashPin('8642', 'parent'));
+  });
+});
