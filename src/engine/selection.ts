@@ -73,7 +73,6 @@ export function selectSessionWords(input: SelectInput): SessionWord[] {
     // 1. Current list, by tier.
     const cur = currentList(lists, today);
     const currentSlots = Math.round(size * CURRENT_SHARE);
-    let reviewLimit = size;
     if (cur) {
       const words = shuffle(fromList(cur), rng);
       const unique = new Set(words.map((c) => normalizeWord(c.word))).size;
@@ -85,12 +84,11 @@ export function selectSessionWords(input: SelectInput): SessionWord[] {
         ? ['tricky', 'new', 'learning']
         : ['tricky', 'new', 'learning', 'mastered'];
       for (const tier of tiers) for (const c of words) if (c.state === tier) take(c, 'current', currentSlots);
-      if (mostlyMastered) {
-        // Leftover current slots are reserved for generated words.
-        reviewLimit = size - (currentSlots - picked.length);
-        masteredCurrent = words.filter((c) => c.state === 'mastered');
-      }
+      if (mostlyMastered) masteredCurrent = words.filter((c) => c.state === 'mastered');
     }
+
+    // Review never takes more than its own share; unfilled current slots go to generated words.
+    const reviewLimit = picked.length + (size - currentSlots);
 
     // 2. Review: tricky first, then oldest last attempt; shuffle gives the random tiebreak.
     const others = shuffle(

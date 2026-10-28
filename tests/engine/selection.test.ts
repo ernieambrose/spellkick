@@ -144,6 +144,19 @@ describe('selectSessionWords', () => {
     expect(count(s, 'generated')).toBe(8);
   });
 
+  it('caps review at 3 when there is no current list', () => {
+    const s = select({ lists: [past] });
+    expect(count(s, 'review')).toBe(3);
+    expect(count(s, 'generated')).toBe(7);
+  });
+
+  it('caps review at 3 when the current list is short', () => {
+    const s = select({ lists: [list('fri', ['kumquat', 'papaya'], '2026-11-06'), past] });
+    expect(count(s, 'current')).toBe(2);
+    expect(count(s, 'review')).toBe(3);
+    expect(count(s, 'generated')).toBe(5);
+  });
+
   it('sends leftover current slots to generated when ≥80% of the list is mastered', () => {
     const attempts = friWords.slice(0, 8).flatMap((w) => mastered(w));
     const s = select({ attempts });
