@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { SessionWord } from '../../engine/selection';
 import type { AttemptKind, GameId } from '../../engine/types';
+import { Scramble } from '../Games/Scramble';
 import { PlaceholderGame } from './PlaceholderGame';
 
 export interface GameResult {
@@ -27,8 +28,8 @@ export interface GameProps {
   timerOn: boolean;
 }
 
-// Tasks 13-14 replace the placeholders with the real games.
+// Task 14 replaces the misspell placeholder with the real game.
 export const GAMES: Record<GameId, ComponentType<GameProps>> = {
-  scramble: PlaceholderGame,
+  scramble: Scramble,
   misspell: PlaceholderGame,
 };

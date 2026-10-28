@@ -7,6 +7,12 @@ import { localDate } from '../../src/engine/streak';
 import type { Profile, WordList } from '../../src/engine/types';
 import { stubAuth } from '../helpers/auth';
 
+// This file tests the home-to-done flow, not a real game: answer each word with one tap.
+vi.mock('../../src/screens/Session/games', async () => {
+  const { PlaceholderGame } = await import('../../src/screens/Session/PlaceholderGame');
+  return { GAMES: { scramble: PlaceholderGame, misspell: PlaceholderGame } };
+});
+
 const felix: Profile = {
   id: 'kid-1',
   name: 'Felix',
