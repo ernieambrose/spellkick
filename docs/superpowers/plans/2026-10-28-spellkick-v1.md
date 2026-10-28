@@ -442,7 +442,7 @@ Behavior:
 **Files:** Create `src/screens/KidHome/`, `src/screens/Session/{useSession.ts,SessionShell.tsx,SessionDone.tsx}`, `src/components/{WordPill,ProgressBar,Timer}.tsx`; Test `tests/screens/useSession.test.ts`, `tests/screens/KidHome.test.tsx`
 
 **Interfaces:**
-- Consumes: `selectSessionWords`, `currentList`, `summarize`, `scoreAnswer`, `computeStreak`, `evaluateBadges`, `adaptGeneratedLevel`, `Repo`
+- Consumes: `selectSessionWords`, `currentList`, `summarize`, `scoreAnswer`, `computeStreak`, `computeStats`, `evaluateBadges`, `adaptGeneratedLevel`, `Repo`
 - Produces:
   - `useSession(game: GameId): { words: SessionWord[]; index: number; current: SessionWord; record(r: { word: string; kind: AttemptKind; ms: number | null; star?: boolean }): void; next(): void; done: boolean; summary: SessionSummary }` — buffers attempts and writes them through the outbox (Task 15; until then directly to `repo.addAttempts`) as each answer is recorded; on finish saves the `Session`, evaluates and saves new awards, updates `generatedLevel` via `adaptGeneratedLevel`.
   - `SessionSummary = { masteredToday: string[]; stillTricky: string[]; points: number; stars: number; streak: { current: number; best: number; isNewBest: boolean }; newBadges: BadgeDef[] }`
