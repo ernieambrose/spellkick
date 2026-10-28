@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-primary: #4f5bd5;
+
+  --color-mastered: #16703b;
+  --color-mastered-bg: #d9f5e3;
+  --color-mastered-text: #16703b;
+
+  --color-tricky: #a04b00;
+  --color-tricky-bg: #ffe7d1;
+  --color-tricky-text: #a04b00;
+
+  --color-review: #3a45a8;
+  --color-review-bg: #e5e8ff;
+  --color-review-text: #3a45a8;
+}
