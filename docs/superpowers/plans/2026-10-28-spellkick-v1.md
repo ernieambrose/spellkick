@@ -6,13 +6,13 @@
 
 **Architecture:** All learning rules live in pure, fully unit-tested TypeScript modules under `src/engine/` (no React, no network). A thin data layer (`src/data/`) exposes one `Repo` interface with an in-memory implementation (tests) and a Supabase implementation (app). Attempts and sessions are append-only records with client-generated UUIDs; word states are *derived* from attempts, so syncing two devices never conflicts. React screens under `src/screens/` only call engine functions and the repo.
 
-**Tech Stack:** Vite + React 18 + TypeScript (strict), React Router (HashRouter), Tailwind CSS, Vitest + Testing Library, `vite-plugin-pwa`, `@supabase/supabase-js`, `idb-keyval` (offline outbox), `wordlist-english` (dictionary source, build-time only). Hosting: GitHub Pages via GitHub Actions.
+**Tech Stack:** Vite + React 18 + TypeScript (strict), React Router (BrowserRouter, with a `vercel.json` SPA rewrite), Tailwind CSS, Vitest + Testing Library, `vite-plugin-pwa`, `@supabase/supabase-js`, `idb-keyval` (offline outbox), `wordlist-english` (dictionary source, build-time only). Hosting: Vercel (free Hobby tier), auto-deploying from GitHub with a preview URL per pull request; GitHub Actions runs CI.
 
 **Spec:** `docs/superpowers/specs/2026-10-28-spellkick-design.md`
 
 ## Global Constraints
 
-- Max **100 words per list**.
+- Max **100 words per list** (a guardrail against accidental pastes). **No limit on a kid's total vocabulary**; all words are kept forever.
 - **Family-only**: no public sign-up. Supabase "Allow new users to sign up" is OFF; the parent is invited from the Supabase dashboard.
 - Kids never enter email, passwords, or personal info. Kid profile = display name, grade, optional 4-digit PIN.
 - **The kid picks the game; the app picks the words.** No kid-facing word chooser.
@@ -23,7 +23,7 @@
 - **No scramble or generated misspelling may contain a blocklisted term as a case-insensitive substring.** Parent-entered words are never filtered.
 - Generated misspellings must not be any real English word.
 - Large tap targets (min 44×44 px); layouts work from 360 px phone width to iPad landscape.
-- Repo is public: never commit secrets. The Supabase anon key and URL are public by design and go in GitHub Actions variables, not source.
+- Repo is public: never commit secrets. The Supabase anon key and URL are public by design and go in Vercel environment variables (and `.env.local` for dev, git-ignored), not source.
 - Commit email for this repo is the GitHub noreply address (already set in local git config).
 
 ## Review Focus
@@ -69,7 +69,8 @@ supabase/migrations/0001_init.sql
 scripts/build-dictionary.ts
 tests/                 mirrors src/
 docs/setup.md          Supabase + GitHub Pages setup for the parent
-.github/workflows/ci.yml, deploy.yml
+.github/workflows/ci.yml
+vercel.json            SPA rewrite to index.html
 ```
 
 ---
@@ -77,13 +78,13 @@ docs/setup.md          Supabase + GitHub Pages setup for the parent
 ### Task 1: Project scaffold, CI, and deploy pipeline
 
 **Files:**
-- Create: Vite React-TS app at repo root, `tailwind.config.ts`, `src/index.css`, `src/App.tsx`, `vitest.config.ts`, `tests/setup.ts`, `tests/App.test.tsx`, `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`, `docs/setup.md`
+- Create: Vite React-TS app at repo root, `tailwind.config.ts`, `src/index.css`, `src/App.tsx`, `vitest.config.ts`, `tests/setup.ts`, `tests/App.test.tsx`, `.github/workflows/ci.yml`, `vercel.json`, `docs/setup.md`, `.env.example`
 - Modify: `README.md` (dev commands)
 
 **Interfaces:**
 - Produces: `npm test` (vitest run), `npm run build`, `npm run dev`, `npm run lint`, `npm run typecheck`. Tailwind theme tokens `mastered`, `tricky`, `review`, `primary` with the Global Constraints hex values.
 
-- [ ] **Step 1: Scaffold** with `npm create vite@latest . -- --template react-ts`, add Tailwind, Vitest, Testing Library, jsdom, React Router, `vite-plugin-pwa`. TS `strict: true`. Vite `base: '/spellkick/'`.
+- [ ] **Step 1: Scaffold** with `npm create vite@latest . -- --template react-ts`, add Tailwind, Vitest, Testing Library, jsdom, React Router, `vite-plugin-pwa`. TS `strict: true`.
 - [ ] **Step 2: Write the failing test** `tests/App.test.tsx`:
 
 ```tsx
@@ -94,10 +95,12 @@ it('renders the SpellKick name', () => {
 ```
 
 - [ ] **Step 3: Run** `npm test` → FAIL (text not found).
-- [ ] **Step 4: Implement** `App.tsx` as a HashRouter shell with a placeholder home that shows "SpellKick". PWA manifest: name "SpellKick", `display: standalone`, theme color `#4f5bd5`, 192/512 icons (simple generated placeholder).
+- [ ] **Step 4: Implement** `App.tsx` as a BrowserRouter shell with a placeholder home that shows "SpellKick". PWA manifest: name "SpellKick", `display: standalone`, theme color `#4f5bd5`, 192/512 icons (simple generated placeholder).
 - [ ] **Step 5: Run** `npm test && npm run typecheck && npm run build` → all pass.
-- [ ] **Step 6: CI + deploy.** `ci.yml`: on push/PR run install, lint, typecheck, test, build. `deploy.yml`: on push to `main`, build with `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from repo **variables**, publish `dist/` with `actions/deploy-pages`. `docs/setup.md` explains enabling Pages (Settings → Pages → GitHub Actions) in plain language.
-- [ ] **Step 7: Commit** `feat: scaffold app, CI, and Pages deploy` and push; confirm the CI run is green with `gh run watch`.
+- [ ] **Step 6: CI + deploy.** `ci.yml`: on push/PR run install, lint, typecheck, test, build. `vercel.json`: rewrite all paths to `/index.html`. `.env.example` lists `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. `docs/setup.md` explains in plain language: in Vercel, "Add New → Project → Import" the `spellkick` GitHub repo (framework preset Vite), and add the two env vars for Production and Preview.
+- [ ] **Step 7: Commit** `feat: scaffold app, CI, and Vercel config` and push; confirm the CI run is green with `gh run watch`.
+
+> **Parent action:** import the repo in Vercel per `docs/setup.md` (one-time, ~2 minutes). After that every push to `main` deploys.
 
 ---
 
@@ -391,13 +394,13 @@ Schema (all tables have `owner uuid not null default auth.uid()` and RLS `owner 
 - `awards(profile_id uuid fk, badge_id text, earned_at timestamptz, pk(profile_id, badge_id))`
 - `parent_settings(owner uuid pk, pin_hash text)`
 
-`docs/setup.md` adds, in plain steps: create a free Supabase project, run the migration in the SQL editor, turn **off** "Allow new users to sign up", invite the parent email, enable email magic links with redirect URL `https://ernieambrose.github.io/spellkick/`, copy URL + anon key into GitHub repo variables.
+`docs/setup.md` adds, in plain steps: create a free Supabase project, run the migration in the SQL editor, turn **off** "Allow new users to sign up", invite the parent email, enable email magic links with Site URL = the Vercel production URL and `http://localhost:5173` as an extra redirect URL, copy the project URL + anon key into Vercel env vars and `.env.local`.
 
 - [ ] **Step 1: Write the failing tests** against `createMemoryRepo()`: save/list a profile; `saveList` replaces words; `addAttempts` with the same id twice stores one; `addAwards` duplicate stores one; deleting a profile removes its lists, attempts, sessions, awards.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement** memory repo, then Supabase repo with the same behavior (upserts with `onConflict`). **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(data): schema and repo layer`
 
-> **Parent action needed before Task 10 can be tried for real:** create the Supabase project per `docs/setup.md`. All automated tests use the memory repo and don't need it.
+> **Parent action needed before Task 10 can be tried for real:** finish the Supabase settings per `docs/setup.md` (project already created 2026-10-28). All automated tests use the memory repo and don't need it.
 
 ---
 
@@ -515,7 +518,7 @@ PWA: `vite-plugin-pwa` `registerType: 'autoUpdate'`, precache app shell + `dicti
 - [ ] **Step 1: Write the failing smoke test**: create profile in parent area → paste list → open kid home → finish a 10-word scramble session → SessionDone shows streak 1 and `first-kick`.
 - [ ] **Step 2: Run** → FAIL or PASS; fix until PASS.
 - [ ] **Step 3: Polish** to match the approved mockups: rounded cards, indigo primary, state colors, 44 px targets, check layouts at 360 px, 768 px, 1024 px (Chrome DevTools device mode); respect `prefers-reduced-motion` for shake/confetti.
-- [ ] **Step 4: Run** `npm test && npm run typecheck && npm run build` → PASS. Push; confirm deploy succeeds and the Pages URL loads.
+- [ ] **Step 4: Run** `npm test && npm run typecheck && npm run build` → PASS. Push; confirm the Vercel deploy succeeds and the production URL loads.
 - [ ] **Step 5: Commit** `chore: v1 polish and smoke test`
 
-> **Parent action:** open the Pages URL on a school laptop and an iPad (Add to Home Screen) and report what's blocked, if anything.
+> **Parent action:** open the Vercel URL on a school laptop and an iPad (Add to Home Screen) and report what's blocked, if anything.

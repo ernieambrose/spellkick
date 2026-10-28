@@ -37,7 +37,7 @@ The app's real job is not drilling. It is getting a kid to *choose* to work on t
 
 ## Constraints
 
-- Up to **100 words per list**.
+- Up to **100 words per list**, as a guardrail. No limit on total vocabulary across lists.
 - Kids are under 13. If shared publicly, US COPPA applies. The parent owns the account; kids never provide email, passwords, or personal information.
 - School laptops may be locked down and block new sites. Test early on one.
 - Code should be reusable inside a native wrapper (e.g., Capacitor) later without a rewrite.
@@ -86,7 +86,7 @@ The app's real job is not drilling. It is getting a kid to *choose* to work on t
 **Stack**
 - React + TypeScript + Vite, built as an installable PWA (offline-capable).
 - Supabase for auth and Postgres storage (free tier). Parent signs in with email (magic link or password).
-- Hosting on Vercel or GitHub Pages, auto-deploying from GitHub.
+- Hosting on Vercel (free Hobby tier; user has an account), auto-deploying from GitHub. Hobby is for non-commercial use; a paid plan is needed if this ever earns money.
 - Text-to-speech via the browser's built-in Web Speech API for "Hear it" (free, no server). Voice quality varies by device; acceptable for v1.
 
 **Rules**
