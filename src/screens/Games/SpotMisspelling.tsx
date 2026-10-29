@@ -163,6 +163,7 @@ export function SpotMisspelling({
           </label>
           <input
             id="spot-fix"
+            autoFocus
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             disabled={!fixing}

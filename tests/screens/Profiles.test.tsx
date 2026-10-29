@@ -71,6 +71,19 @@ describe('Profiles', () => {
     expect(window.location.pathname).toBe(`/kid/${junie.id}`);
   });
 
+  it('PIN dialog: focus moves into it when it opens, and Escape closes it', async () => {
+    const junie = profile({ name: 'Junie', pinHash: 'x' });
+    const user = userEvent.setup();
+    renderAt('/profiles', await repoWith(junie));
+
+    await user.click(await screen.findByRole('button', { name: /Junie/ }));
+    const dialog = screen.getByRole('dialog', { name: "Junie's PIN" });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('sends a signed-in user with an active profile from / to that kid', async () => {
     const felix = profile({ name: 'Felix' });
     localStorage.setItem('spellkick.activeProfile', felix.id);

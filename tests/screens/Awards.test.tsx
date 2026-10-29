@@ -66,3 +66,31 @@ describe('Awards', () => {
     expect(await screen.findByRole('link', { name: /Back/ })).toHaveAttribute('href', `/kid/${felix.id}`);
   });
 });
+
+describe('Awards loading and failure', () => {
+  async function renderWith(repo: ReturnType<typeof createMemoryRepo>) {
+    localStorage.setItem('spellkick.activeProfile', felix.id);
+    window.history.pushState({}, '', `/kid/${felix.id}/awards`);
+    render(<App repo={repo} authClient={stubAuth({ signedIn: true })} />);
+  }
+
+  it('shows a neutral skeleton, not "0 earned", while the data loads', async () => {
+    const repo = createMemoryRepo();
+    await repo.saveProfile(felix);
+    repo.listAwards = () => new Promise(() => {}); // never resolves
+    await renderWith(repo);
+    expect(await screen.findByRole('status', { name: 'Loading your awards' })).toBeInTheDocument();
+    expect(screen.queryByText(/earned/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Locked')).not.toBeInTheDocument();
+  });
+
+  it('shows a friendly message with a way home when the read fails', async () => {
+    const repo = createMemoryRepo();
+    await repo.saveProfile(felix);
+    repo.listAwards = () => Promise.reject(new Error('offline'));
+    await renderWith(repo);
+    expect(await screen.findByText("Can't load your awards right now.")).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back home' })).toHaveAttribute('href', `/kid/${felix.id}`);
+    expect(screen.queryByText(/earned/)).not.toBeInTheDocument();
+  });
+});

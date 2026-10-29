@@ -27,6 +27,7 @@ export function Awards() {
   const repo = useRepo();
   const { activeId } = useActiveProfile();
   const [data, setData] = useState<AwardsData | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     if (!activeId) return;
@@ -38,7 +39,7 @@ export function Awards() {
           earned: new Set(awards.map((a) => a.badgeId)),
           stats: computeStats(attempts, sessions, localDate(new Date())),
         }),
-      () => {}, // offline with nothing cached: show the shelf empty
+      () => live && setLoadFailed(true), // offline with nothing cached
     );
     return () => {
       live = false;
@@ -48,21 +49,47 @@ export function Awards() {
   const earned = data?.earned ?? new Set<string>();
   const next = data ? nextUp(data.stats, earned) : null;
 
+  const backLink = (
+    <Link
+      to={`/kid/${activeId}`}
+      className="flex min-h-11 items-center rounded-full border border-slate-300 px-6 font-semibold text-slate-600 hover:bg-white"
+    >
+      ← Back
+    </Link>
+  );
+
+  if (loadFailed) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8">
+        <h1 className="text-3xl font-bold text-primary sm:text-4xl">Awards</h1>
+        <div className="rounded-3xl bg-white p-6 text-center shadow-sm">
+          <p className="text-lg font-semibold text-slate-700">Can't load your awards right now.</p>
+          <p className="mt-1 text-slate-500">Check your connection and try again in a bit.</p>
+          <Link
+            to={`/kid/${activeId}`}
+            className="mt-4 inline-flex min-h-11 items-center rounded-full bg-primary px-6 font-semibold text-white"
+          >
+            Back home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-3xl font-bold text-primary sm:text-4xl">Awards</h1>
-        <Link
-          to={`/kid/${activeId}`}
-          className="flex min-h-11 items-center rounded-full border border-slate-300 px-6 font-semibold text-slate-600 hover:bg-white"
-        >
-          ← Back
-        </Link>
+        {backLink}
       </div>
 
-      <p className="text-xl font-semibold text-slate-700">
-        {earned.size} of {BADGES.length} earned
-      </p>
+      {data ? (
+        <p className="text-xl font-semibold text-slate-700">
+          {earned.size} of {BADGES.length} earned
+        </p>
+      ) : (
+        <div role="status" aria-label="Loading your awards" className="h-7 w-40 animate-pulse rounded-full bg-slate-200 motion-reduce:animate-none" />
+      )}
 
       {next && (
         <section aria-label="Next up" className="rounded-3xl bg-white p-5 shadow-sm sm:p-6">
@@ -84,7 +111,11 @@ export function Awards() {
       )}
 
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {BADGES.map((b) => {
+        {!data &&
+          BADGES.map((b) => (
+            <li key={b.id} aria-hidden className="h-36 animate-pulse rounded-3xl bg-slate-200 motion-reduce:animate-none" />
+          ))}
+        {data && BADGES.map((b) => {
           const isEarned = earned.has(b.id);
           return (
             <li

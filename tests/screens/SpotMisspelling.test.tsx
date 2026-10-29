@@ -51,6 +51,7 @@ describe('SpotMisspelling', () => {
     tapChoice(misspelled());
     expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'practice' });
     const input = screen.getByLabelText(/Fix it for a bonus/);
+    expect(input).toHaveFocus();
     expect(input).toHaveAttribute('autocapitalize', 'off');
     expect(input).toHaveAttribute('autocorrect', 'off');
     expect(input).toHaveAttribute('spellcheck', 'false');

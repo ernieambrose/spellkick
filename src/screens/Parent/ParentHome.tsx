@@ -52,7 +52,7 @@ export function ParentHome() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-4 py-8">
       <header className="flex flex-wrap items-center gap-3">
-        <h1 className="flex-1 text-3xl font-bold text-primary">Parent</h1>
+        <h1 className="w-full text-3xl font-bold text-primary sm:w-auto sm:flex-1">Parent</h1>
         <Link to="/profiles" className={secondaryButton}>
           Back to kids
         </Link>

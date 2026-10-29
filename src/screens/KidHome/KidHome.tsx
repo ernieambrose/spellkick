@@ -34,7 +34,7 @@ export function KidHome() {
     let live = true;
     Promise.all([repo.listLists(activeId), repo.listAttempts(activeId), repo.listSessions(activeId)]).then(
       ([lists, attempts, sessions]) => live && setData({ lists, attempts, sessions }),
-      () => {}, // offline before Task 15: show the home without stats
+      () => {}, // couldn't load: show the home without stats
     );
     return () => {
       live = false;

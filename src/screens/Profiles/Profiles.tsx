@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useActiveProfile } from '../../app/profileContext';
 import { useRepo } from '../../app/repoContext';
@@ -20,6 +20,8 @@ export function Profiles() {
   const [profiles, setProfiles] = useState<Profile[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [pinFor, setPinFor] = useState<Profile | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -31,6 +33,19 @@ export function Profiles() {
       live = false;
     };
   }, [repo]);
+
+  // Move focus into the PIN dialog when it opens, close it on Escape, and give focus back after.
+  useEffect(() => {
+    if (!pinFor) return;
+    dialogRef.current?.querySelector('button')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPinFor(null);
+    document.addEventListener('keydown', onKey);
+    const back = opener.current;
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      back?.focus();
+    };
+  }, [pinFor]);
 
   function enter(p: Profile) {
     select(p.id);
@@ -57,12 +72,16 @@ export function Profiles() {
             <p className="mt-2 text-slate-500">A grown-up can add one: tap Parent below.</p>
           </div>
         ) : (
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <ul className="flex flex-wrap justify-center gap-4">
             {profiles.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="w-[calc(50%-0.5rem)] sm:w-48">
                 <button
                   type="button"
-                  onClick={() => (p.pinHash ? setPinFor(p) : enter(p))}
+                  onClick={(e) => {
+                    opener.current = e.currentTarget;
+                    if (p.pinHash) setPinFor(p);
+                    else enter(p);
+                  }}
                   className="flex w-full flex-col items-center gap-3 rounded-3xl bg-white p-5 shadow-sm transition hover:shadow-md active:scale-[0.98]"
                 >
                   <span
@@ -91,6 +110,7 @@ export function Profiles() {
 
       {pinFor && (
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label={`${pinFor.name}'s PIN`}
