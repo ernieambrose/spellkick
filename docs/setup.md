@@ -27,8 +27,9 @@ Supabase stores the kids' profiles, word lists, and progress, and handles the pa
 1. In the left sidebar, click **SQL Editor**, then **New query**.
 2. In this repository, open the file `supabase/migrations/0001_init.sql` and copy everything in it.
 3. Paste it into the query box and click **Run**. You should see "Success. No rows returned."
+4. Click **New query** again and do the same with `supabase/migrations/0002_grants.sql`. This lets signed-in parents read and write the tables (new Supabase projects don't allow it by default); the database rules still limit each parent to their own family's rows.
 
-Run it only once. Running it a second time shows "already exists" errors; that is harmless.
+Run each file once, in order: 0001, then 0002. Running 0001 a second time shows "already exists" errors; that is harmless. Running 0002 again is harmless too.
 
 ### 2. Turn off public sign-up
 
