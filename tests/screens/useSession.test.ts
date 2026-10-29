@@ -23,7 +23,7 @@ const felix: Profile = {
 };
 
 function wrapper(repo: Repo) {
-  const active = { activeId: felix.id, profile: felix, select() {}, clear() {} };
+  const active = { activeId: felix.id, profile: felix, loadFailed: false, reload() {}, select() {}, clear() {} };
   return ({ children }: { children: ReactNode }) =>
     createElement(
       RepoContext.Provider,

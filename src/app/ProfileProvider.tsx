@@ -29,10 +29,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const [activeId, setActiveId] = useState<string | null>(readActiveId);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadTry, setLoadTry] = useState(0); // bumped by reload()
 
   const select = useCallback((id: string) => {
     writeActiveId(id);
     setActiveId(id);
+  }, []);
+
+  const reload = useCallback(() => {
+    setLoadFailed(false);
+    setLoadTry((n) => n + 1);
   }, []);
 
   const clear = useCallback(() => {
@@ -46,20 +53,21 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     repo.listProfiles().then(
       (profiles) => {
         if (!live) return;
+        setLoadFailed(false);
         const found = profiles.find((p) => p.id === activeId) ?? null;
         setProfile(found);
         if (!found) clear(); // the profile was deleted
       },
-      () => {}, // offline or signed out: keep the id, show no profile
+      () => live && setLoadFailed(true), // offline or signed out: keep the id, show no profile
     );
     return () => {
       live = false;
     };
-  }, [activeId, status, repo, clear]);
+  }, [activeId, status, repo, clear, loadTry]);
 
   const value = useMemo(
-    () => ({ activeId, profile: profile?.id === activeId ? profile : null, select, clear }),
-    [activeId, profile, select, clear],
+    () => ({ activeId, profile: profile?.id === activeId ? profile : null, loadFailed, reload, select, clear }),
+    [activeId, profile, loadFailed, reload, select, clear],
   );
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }

@@ -121,4 +121,17 @@ describe('SessionShell', () => {
     expect(await screen.findByText(/Getting your words ready/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', `/kid/${felix.id}`);
   });
+
+  it('shows "Couldn\'t get your words" (not a forever spinner) when the kid profile fails to load, and Try again recovers', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    await renderAt(`/kid/${felix.id}/play/scramble`, (r) => ({
+      ...r,
+      listProfiles: () => (fail ? Promise.reject(new Error('offline')) : r.listProfiles()),
+    }));
+    expect(await screen.findByText(/Couldn't get your words/)).toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('1 of 10')).toBeInTheDocument();
+  });
 });

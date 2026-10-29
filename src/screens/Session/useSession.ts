@@ -150,7 +150,7 @@ async function loadSetup(
 
 export function useSession(game: GameId, opts: SessionOptions = {}): SessionState {
   const repo = useRepo();
-  const { profile: activeProfile } = useActiveProfile();
+  const { profile: activeProfile, loadFailed: profileFailed, reload: reloadProfile } = useActiveProfile();
   const mode = opts.mode ?? 'normal';
   const rngRef = useRef<Rng>(opts.rng ?? Math.random);
   const nowRef = useRef(opts.now ?? (() => new Date()));
@@ -178,8 +178,11 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
 
   const retry = useCallback(() => {
     setError(null);
+    reloadProfile();
     setAttempt((n) => n + 1);
-  }, []);
+  }, [reloadProfile]);
+  // No profile to start from (couldn't load it) is the same "couldn't get your words" failure.
+  const shownError: SessionError | null = error ?? (!activeProfile && profileFailed ? 'load' : null);
 
   const words = setup?.words ?? [];
   const done = setup !== null && index >= words.length;
@@ -290,8 +293,8 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
     skip,
     next,
     done,
-    loading: setup === null && error === null,
-    error,
+    loading: setup === null && shownError === null,
+    error: shownError,
     retry,
     summary,
     timerOn: setup?.profile.timerOn ?? false,
