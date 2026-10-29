@@ -7,7 +7,9 @@ import type { Repo } from '../../src/data/repo';
 import { hashPin } from '../../src/engine/pin';
 import { localDate } from '../../src/engine/streak';
 import type { Attempt, Profile, WordList } from '../../src/engine/types';
+import { createSupabaseAuthClient, type AuthClient } from '../../src/app/authClient';
 import { stubAuth } from '../helpers/auth';
+import { fakeSupabaseAuth } from '../helpers/fakeSupabaseAuth';
 
 const PARENT_PIN = '1234';
 
@@ -56,7 +58,7 @@ async function repoWith(profiles: Profile[] = [], opts: { pinSet?: boolean } = {
   return repo;
 }
 
-function renderAt(path: string, repo: Repo, auth = stubAuth({ signedIn: true })) {
+function renderAt(path: string, repo: Repo, auth: AuthClient = stubAuth({ signedIn: true })) {
   window.history.pushState({}, '', path);
   render(<App repo={repo} authClient={auth} />);
   return userEvent.setup();
@@ -100,6 +102,16 @@ describe('Parent gate', () => {
     expect(await screen.findByText('Parent PIN')).toBeInTheDocument();
     await typePin(user, PARENT_PIN);
     expect(await screen.findByRole('heading', { name: /Felix/ })).toBeInTheDocument();
+  });
+
+  it('opened offline after the token expired: stays signed in and the PIN (salted by owner id) unlocks', async () => {
+    const repo = await repoWith([profile()], { pinSet: false });
+    await repo.setParentPinHash(await hashPin(PARENT_PIN, 'owner-1'));
+    const { db } = fakeSupabaseAuth({ stored: { user: { id: 'owner-1' } }, offlineExpired: true });
+    const user = renderAt('/parent', repo, createSupabaseAuthClient(db));
+    expect(await screen.findByText('Parent PIN')).toBeInTheDocument();
+    await typePin(user, PARENT_PIN);
+    expect(await screen.findByRole('heading', { name: 'Parent' })).toBeInTheDocument();
   });
 
   it('Sign out clears the active kid and lands on /signin', async () => {
