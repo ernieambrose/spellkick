@@ -61,7 +61,8 @@ export function createSupabaseAuthClient(db: SupabaseClient): AuthClient {
       });
       return () => data.subscription.unsubscribe();
     },
-    signOut: () => db.auth.signOut(),
+    // 'local' just clears this device's session, so it works offline (global needs the server).
+    signOut: () => db.auth.signOut({ scope: 'local' }),
   };
 }
 

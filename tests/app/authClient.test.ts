@@ -42,4 +42,12 @@ describe('createSupabaseAuthClient', () => {
     emit('SIGNED_OUT', null);
     expect(cb.mock.calls).toEqual([[true], [false]]);
   });
+
+  it('signs out locally, so it works offline (no server call needed)', async () => {
+    const { db, auth } = fakeSupabaseAuth({ stored });
+    const client = createSupabaseAuthClient(db);
+    expect(await client.signOut()).toEqual({ error: null });
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(auth.storage.getItem(auth.storageKey)).toBeNull();
+  });
 });
