@@ -1,0 +1,135 @@
+# Setup guide
+
+Plain-language steps for getting SpellKick online. You do not need to write any code.
+
+## Vercel (hosting) - one-time, about 2 minutes
+
+Vercel is the free service that puts the app on the internet. After this, every change merged to `main` goes live automatically.
+
+1. Go to vercel.com and sign in with your GitHub account.
+2. Click **Add New**, then **Project**, then **Import** next to the `spellkick` repository.
+3. Under **Framework Preset**, choose **Vite** (it is usually picked for you).
+4. Open **Environment Variables** and add these two, ticking both **Production** and **Preview** for each:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+
+   The values come from Supabase (see below). If you do not have them yet, you can add them later under Project Settings, then Environment Variables, and redeploy.
+5. Click **Deploy**.
+
+These two values are safe to be public. They are not passwords.
+
+## Supabase (database and sign-in) - one-time, about 30 minutes
+
+Supabase stores the kids' profiles, word lists, and progress, and handles the parent sign-in. The Supabase project already exists (created 2026-10-28), so start at step 1. Open it at supabase.com and sign in.
+
+### 1. Create the tables
+
+1. In the left sidebar, click **SQL Editor**, then **New query**.
+2. In this repository, open the file `supabase/migrations/0001_init.sql` and copy everything in it.
+3. Paste it into the query box and click **Run**. You should see "Success. No rows returned."
+4. Click **New query** again and do the same with `supabase/migrations/0002_grants.sql`. This lets signed-in parents read and write the tables (new Supabase projects don't allow it by default); the database rules still limit each parent to their own family's rows.
+
+Run each file once, in order: 0001, then 0002. Running 0001 a second time shows "already exists" errors; that is harmless. Running 0002 again is harmless too.
+
+### 2. Turn off public sign-up
+
+SpellKick is family-only, so nobody should be able to create their own account.
+
+1. Click **Authentication** in the left sidebar, then **Sign In / Providers** (on some versions, **Providers** or **Settings**).
+2. Turn **off** "Allow new users to sign up".
+3. Click **Save**.
+
+### 3. Set the Site URL and Redirect URLs
+
+1. Click **Authentication**, then **URL Configuration**.
+2. Set **Site URL** to `https://spellkick.app`.
+3. Under **Redirect URLs**, click **Add URL** and add each of these:
+   - `https://spellkick.app/**`
+   - `https://*-ernieambrose.vercel.app/**` (Vercel preview deployments)
+4. Click **Save**.
+
+Do this before inviting anyone, because the invite email links to this address.
+
+### 4. Send email through Resend (custom SMTP)
+
+Supabase's built-in email sender only sends a sign-in **link**, only to members of your Supabase team, and only a few emails per hour. A link is not enough for SpellKick: on an iPad, tapping it signs you in to Safari, not to the home-screen app. The sign-in code (next step) only shows up in emails sent through your own email sender, so set that up first. SpellKick uses Resend (resend.com, free tier).
+
+**Verify the domain in Resend**
+
+1. Sign in at resend.com, open **Domains**, click **Add Domain**, and enter `spellkick.app`.
+2. Resend shows DNS records to add. At your domain's DNS provider, add each one exactly as shown:
+   - a **TXT** record named `resend._domainkey` (the DKIM key, a long value starting with `p=`)
+   - the **CNAME** records named `rsend` and `send` (for sending and bounces; Resend shows the exact names and values)
+   - optional but recommended: a **TXT** record named `_dmarc` with the value `v=DMARC1; p=none;`
+3. Back in Resend, click **Verify**. It can take a few minutes to an hour. Wait until the domain shows **Verified**.
+
+**Create an API key**
+
+1. In Resend, open **API Keys**, click **Create API Key**, name it `supabase`, and give it **Sending access** (limit it to `spellkick.app` if offered).
+2. Copy the key (it starts with `re_`). Resend shows it only once.
+
+The API key is a secret, like a password. Paste it only into Supabase (below). Never put it in Vercel, in `.env.local`, or anywhere in this repository.
+
+**Point Supabase at Resend**
+
+1. In Supabase, click **Authentication**, then **Emails**, then the **SMTP Settings** tab (on some versions: **Project Settings**, then **Authentication**, then **SMTP Settings**).
+2. Turn on **Enable Custom SMTP** and fill in:
+   - **Sender email**: `noreply@spellkick.app`
+   - **Sender name**: `SpellKick`
+   - **Host**: `smtp.resend.com`
+   - **Port**: `465`
+   - **Username**: `resend`
+   - **Password**: the Resend API key
+3. Click **Save**.
+4. Raise the email limit: click **Authentication**, then **Rate Limits**, and set **Rate limit for sending emails** to at least 30 per hour so a few retries in a row still get through. Click **Save**.
+
+### 5. Make the sign-in emails show the code
+
+Do this after step 4: with Supabase's built-in sender, the template changes and codes don't apply, and the email only has a link.
+
+The app asks for the code from your email, which works better on a phone or iPad than a link. Supabase sends one of two emails when you sign in: **Magic Link** for a confirmed account, and **Confirm signup** for an account that has not been confirmed yet. Put the code in both so it always shows up.
+
+1. Click **Authentication**, then **Emails** (on some versions, **Email Templates**).
+2. Open the **Magic Link** template, replace the message body with the sample below, and click **Save**.
+3. Open the **Confirm signup** template, replace its body with the same sample, and click **Save**.
+
+   ```html
+   <h2>Your SpellKick sign-in code</h2>
+   <p>Type this code into SpellKick:</p>
+   <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">{{ .Token }}</p>
+   <p>It expires soon. If you did not ask for it, you can ignore this email.</p>
+   ```
+
+   The important part is `{{ .Token }}`. That is where the code appears. Keep it exactly as written, including the braces and the dot.
+
+4. **Required check: the code length must be 6.** Under **Authentication**, open the **Email** provider settings (in **Sign In / Providers**, click **Email**) and make sure **Email OTP length** is **6**. Change it to 6 and save if it shows something else. (The app also accepts 7 or 8 digits, but 6 is what the sign-in screen is designed around.)
+
+### 6. Invite yourself (the parent)
+
+With Resend set up (step 4), invites and codes can go to any email address. To add a second parent later, invite their address the same way.
+
+If a code does not arrive, check the spam folder, then the **Logs** (or **Emails**) page in Resend to see whether it was sent.
+
+1. Click **Authentication**, then **Users**.
+2. Click **Add user**, then **Invite user**.
+3. Type the parent email address and click **Invite**.
+4. Open the invite email and click its link once. That accepts the invite and confirms the account. After this, signing in to SpellKick sends a code.
+
+### 7. Copy the two keys into Vercel and your computer
+
+1. Click **Project Settings** (the gear icon), then **Data API** (or **API**). Copy the **Project URL**.
+2. Then open **API Keys** and copy the **Publishable key** (it starts with `sb_publishable_`). Older projects show an **anon public** key instead, sometimes under a **Legacy** tab; use that if there is no Publishable key.
+3. In Vercel, open the project, then **Settings**, then **Environment Variables**. Add (or update) these two, ticking both **Production** and **Preview**:
+   - `VITE_SUPABASE_URL` = the Project URL
+   - `VITE_SUPABASE_ANON_KEY` = the Publishable key (older projects: the anon public key)
+4. Redeploy: in Vercel, open **Deployments**, click the three dots on the latest one, and choose **Redeploy**.
+5. For running the app on your own computer, create a file named `.env.local` in the top folder of the repository containing:
+
+   ```
+   VITE_SUPABASE_URL=paste-the-project-url-here
+   VITE_SUPABASE_ANON_KEY=paste-the-publishable-key-here
+   ```
+
+   This file is ignored by git, so it never gets uploaded.
+
+These two values are safe to be public; the database rules only let a signed-in parent see their own family's data. Never use the **Secret key** (or the older **service_role** key) anywhere: not in Vercel, not in `.env.local`, not in the code. That one is a real password for the whole database.

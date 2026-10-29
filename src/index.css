@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-primary: #4f5bd5;
+
+  --color-mastered: #16703b;
+  --color-mastered-bg: #d9f5e3;
+  --color-mastered-text: #16703b;
+
+  --color-tricky: #a04b00;
+  --color-tricky-bg: #ffe7d1;
+  --color-tricky-text: #a04b00;
+
+  --color-review: #3a45a8;
+  --color-review-bg: #e5e8ff;
+  --color-review-text: #3a45a8;
+
+  --animate-shake: shake 0.4s ease-in-out;
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-8px); }
+    40%, 80% { transform: translateX(8px); }
+  }
+}
+
+@layer base {
+  body {
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-900);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
