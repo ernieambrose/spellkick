@@ -6,6 +6,7 @@ import { PinPad } from '../../components/PinPad';
 import { hashPin } from '../../engine/pin';
 import type { ParentArea } from './parentArea';
 import { ReverifyCode } from './ReverifyCode';
+import { primaryButton, secondaryButton } from './ui';
 
 type Step =
   | { kind: 'loading' }
@@ -27,6 +28,7 @@ export function ParentGate() {
   const [changing, setChanging] = useState(false); // set step opened from inside; Cancel returns there
   const [mismatch, setMismatch] = useState(false);
   const [notice, setNotice] = useState('');
+  const [loadTry, setLoadTry] = useState(0); // bumped by Try again
 
   useEffect(() => {
     let live = true;
@@ -37,7 +39,7 @@ export function ParentGate() {
     return () => {
       live = false;
     };
-  }, [repo]);
+  }, [repo, loadTry]);
 
   // Salt = the signed-in owner's id; demo mode has none, so it uses 'parent'.
   const hash = async (pin: string) => hashPin(pin, (await getUser())?.id ?? 'parent');
@@ -134,7 +136,20 @@ export function ParentGate() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
       {step.kind === 'failed' && (
-        <p className="text-center text-tricky-text">Couldn't load the parent settings. Check your connection.</p>
+        <>
+          <p className="text-center text-tricky-text">Couldn't load the parent settings. Check your connection.</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button type="button" onClick={() => {
+                setStep({ kind: 'loading' });
+                setLoadTry((n) => n + 1);
+              }} className={primaryButton}>
+              Try again
+            </button>
+            <button type="button" onClick={() => navigate('/profiles')} className={secondaryButton}>
+              Back to kids
+            </button>
+          </div>
+        </>
       )}
       {step.kind === 'set' && (
         <p className="max-w-xs text-center text-slate-600">

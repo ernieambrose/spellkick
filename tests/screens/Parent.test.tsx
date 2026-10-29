@@ -114,6 +114,28 @@ describe('Parent gate', () => {
     expect(await screen.findByRole('heading', { name: 'Parent' })).toBeInTheDocument();
   });
 
+  it('when the parent settings fail to load, offers Try again and Back to kids', async () => {
+    const mem = await repoWith([profile()]);
+    let fail = true;
+    const repo: Repo = {
+      ...mem,
+      getParentPinHash: () => (fail ? Promise.reject(new Error('offline')) : mem.getParentPinHash()),
+    };
+    const user = renderAt('/parent', repo);
+    expect(await screen.findByText(/Couldn't load the parent settings/)).toBeInTheDocument();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Parent PIN')).toBeInTheDocument();
+  });
+
+  it('Back to kids leaves a parent gate that failed to load', async () => {
+    const mem = await repoWith([profile()]);
+    const repo: Repo = { ...mem, getParentPinHash: () => Promise.reject(new Error('offline')) };
+    const user = renderAt('/parent', repo);
+    await user.click(await screen.findByRole('button', { name: 'Back to kids' }));
+    expect(window.location.pathname).toBe('/profiles');
+  });
+
   it('Sign out clears the active kid and lands on /signin', async () => {
     const felix = profile();
     localStorage.setItem('spellkick.activeProfile', felix.id);
