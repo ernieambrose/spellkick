@@ -61,8 +61,13 @@ export function createSupabaseAuthClient(db: SupabaseClient): AuthClient {
       });
       return () => data.subscription.unsubscribe();
     },
-    // 'local' just clears this device's session, so it works offline (global needs the server).
-    signOut: () => db.auth.signOut({ scope: 'local' }),
+    // Global sign-out revokes the refresh token on the server. Offline it can't, so clear this
+    // device's session instead ('local'), which still signs out here.
+    async signOut() {
+      if (offline()) return db.auth.signOut({ scope: 'local' });
+      const res = await db.auth.signOut();
+      return isAuthRetryableFetchError(res.error) ? db.auth.signOut({ scope: 'local' }) : res;
+    },
   };
 }
 

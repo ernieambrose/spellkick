@@ -1,3 +1,4 @@
+import { AuthRetryableFetchError } from '@supabase/supabase-js';
 import { createSupabaseAuthClient } from '../../src/app/authClient';
 import { fakeSupabaseAuth } from '../helpers/fakeSupabaseAuth';
 
@@ -43,11 +44,39 @@ describe('createSupabaseAuthClient', () => {
     expect(cb.mock.calls).toEqual([[true], [false]]);
   });
 
-  it('signs out locally, so it works offline (no server call needed)', async () => {
-    const { db, auth } = fakeSupabaseAuth({ stored });
-    const client = createSupabaseAuthClient(db);
-    expect(await client.signOut()).toEqual({ error: null });
-    expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
-    expect(auth.storage.getItem(auth.storageKey)).toBeNull();
+  describe('signOut', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('offline: signs out locally only', async () => {
+      vi.stubGlobal('navigator', { onLine: false });
+      const { db, auth } = fakeSupabaseAuth({ stored });
+      expect(await createSupabaseAuthClient(db).signOut()).toEqual({ error: null });
+      expect(auth.signOut.mock.calls).toEqual([[{ scope: 'local' }]]);
+      expect(auth.storage.getItem(auth.storageKey)).toBeNull();
+    });
+
+    it('online: a global sign-out (revokes the refresh token) and nothing else', async () => {
+      vi.stubGlobal('navigator', { onLine: true });
+      const { db, auth } = fakeSupabaseAuth({ stored });
+      expect(await createSupabaseAuthClient(db).signOut()).toEqual({ error: null });
+      expect(auth.signOut.mock.calls).toEqual([[]]);
+    });
+
+    it('online but the request fails on the network: falls back to a local sign-out', async () => {
+      vi.stubGlobal('navigator', { onLine: true });
+      const { db, auth } = fakeSupabaseAuth({ stored });
+      auth.signOut.mockResolvedValueOnce({ error: new AuthRetryableFetchError('Failed to fetch', 0) as never });
+      expect(await createSupabaseAuthClient(db).signOut()).toEqual({ error: null });
+      expect(auth.signOut.mock.calls).toEqual([[], [{ scope: 'local' }]]);
+      expect(auth.storage.getItem(auth.storageKey)).toBeNull();
+    });
+
+    it('online with a non-network error: returns that error without retrying', async () => {
+      vi.stubGlobal('navigator', { onLine: true });
+      const { db, auth } = fakeSupabaseAuth({ stored });
+      auth.signOut.mockResolvedValueOnce({ error: { message: 'boom' } as never });
+      expect(await createSupabaseAuthClient(db).signOut()).toEqual({ error: { message: 'boom' } });
+      expect(auth.signOut).toHaveBeenCalledTimes(1);
+    });
   });
 });
