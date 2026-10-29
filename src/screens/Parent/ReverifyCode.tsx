@@ -8,7 +8,7 @@ interface Props {
   onCancel(): void;
 }
 
-// "Forgot PIN?": proves it's the parent by emailing a 6-digit code (same flow as sign-in).
+// "Forgot PIN?": proves it's the parent by emailing a code (same flow as sign-in).
 export function ReverifyCode({ email, onVerified, onCancel }: Props) {
   const { sendCode, verifyCode } = useAuth();
   const [sent, setSent] = useState(false);
@@ -50,19 +50,19 @@ export function ReverifyCode({ email, onVerified, onCancel }: Props) {
           <p className="text-slate-600">We sent a code to {email}.</p>
           <div>
             <label htmlFor="reverify-code" className={labelClass}>
-              6-digit code
+              Code from the email
             </label>
             <input
               id="reverify-code"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
+              maxLength={8}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
               className={`${fieldClass} tracking-[0.5em]`}
             />
           </div>
-          <button type="submit" disabled={busy || code.length !== 6} className={primaryButton}>
+          <button type="submit" disabled={busy || code.length < 6} className={primaryButton}>
             Verify
           </button>
         </form>

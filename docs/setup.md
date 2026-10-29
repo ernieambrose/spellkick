@@ -18,7 +18,7 @@ Vercel is the free service that puts the app on the internet. After this, every 
 
 These two values are safe to be public. They are not passwords.
 
-## Supabase (database and sign-in) - one-time, about 15 minutes
+## Supabase (database and sign-in) - one-time, about 30 minutes
 
 Supabase stores the kids' profiles, word lists, and progress, and handles the parent sign-in. The Supabase project already exists (created 2026-10-28), so start at step 1. Open it at supabase.com and sign in.
 
@@ -38,17 +38,55 @@ SpellKick is family-only, so nobody should be able to create their own account.
 2. Turn **off** "Allow new users to sign up".
 3. Click **Save**.
 
-### 3. Set the Site URL
+### 3. Set the Site URL and Redirect URLs
 
 1. Click **Authentication**, then **URL Configuration**.
-2. Set **Site URL** to the app's Vercel production address, for example `https://spellkick.vercel.app` (use the address Vercel shows on your project page).
-3. Click **Save**.
+2. Set **Site URL** to `https://spellkick.app`.
+3. Under **Redirect URLs**, click **Add URL** and add each of these:
+   - `https://spellkick.app/**`
+   - `https://*-ernieambrose.vercel.app/**` (Vercel preview deployments)
+4. Click **Save**.
 
 Do this before inviting anyone, because the invite email links to this address.
 
-### 4. Make the sign-in emails show a 6-digit code
+### 4. Send email through Resend (custom SMTP)
 
-The app asks for a 6-digit code from your email, which works better on a phone or iPad than a link. Supabase sends one of two emails when you sign in: **Magic Link** for a confirmed account, and **Confirm signup** for an account that has not been confirmed yet. Put the code in both so it always shows up.
+Supabase's built-in email sender only sends a sign-in **link**, only to members of your Supabase team, and only a few emails per hour. A link is not enough for SpellKick: on an iPad, tapping it signs you in to Safari, not to the home-screen app. The sign-in code (next step) only shows up in emails sent through your own email sender, so set that up first. SpellKick uses Resend (resend.com, free tier).
+
+**Verify the domain in Resend**
+
+1. Sign in at resend.com, open **Domains**, click **Add Domain**, and enter `spellkick.app`.
+2. Resend shows DNS records to add. At your domain's DNS provider, add each one exactly as shown:
+   - a **TXT** record named `resend._domainkey` (the DKIM key, a long value starting with `p=`)
+   - the **CNAME** records named `rsend` and `send` (for sending and bounces; Resend shows the exact names and values)
+   - optional but recommended: a **TXT** record named `_dmarc` with the value `v=DMARC1; p=none;`
+3. Back in Resend, click **Verify**. It can take a few minutes to an hour. Wait until the domain shows **Verified**.
+
+**Create an API key**
+
+1. In Resend, open **API Keys**, click **Create API Key**, name it `supabase`, and give it **Sending access** (limit it to `spellkick.app` if offered).
+2. Copy the key (it starts with `re_`). Resend shows it only once.
+
+The API key is a secret, like a password. Paste it only into Supabase (below). Never put it in Vercel, in `.env.local`, or anywhere in this repository.
+
+**Point Supabase at Resend**
+
+1. In Supabase, click **Authentication**, then **Emails**, then the **SMTP Settings** tab (on some versions: **Project Settings**, then **Authentication**, then **SMTP Settings**).
+2. Turn on **Enable Custom SMTP** and fill in:
+   - **Sender email**: `noreply@spellkick.app`
+   - **Sender name**: `SpellKick`
+   - **Host**: `smtp.resend.com`
+   - **Port**: `465`
+   - **Username**: `resend`
+   - **Password**: the Resend API key
+3. Click **Save**.
+4. Raise the email limit: click **Authentication**, then **Rate Limits**, and set **Rate limit for sending emails** to at least 30 per hour so a few retries in a row still get through. Click **Save**.
+
+### 5. Make the sign-in emails show the code
+
+Do this after step 4: with Supabase's built-in sender, the template changes and codes don't apply, and the email only has a link.
+
+The app asks for the code from your email, which works better on a phone or iPad than a link. Supabase sends one of two emails when you sign in: **Magic Link** for a confirmed account, and **Confirm signup** for an account that has not been confirmed yet. Put the code in both so it always shows up.
 
 1. Click **Authentication**, then **Emails** (on some versions, **Email Templates**).
 2. Open the **Magic Link** template, replace the message body with the sample below, and click **Save**.
@@ -63,20 +101,20 @@ The app asks for a 6-digit code from your email, which works better on a phone o
 
    The important part is `{{ .Token }}`. That is where the code appears. Keep it exactly as written, including the braces and the dot.
 
-4. Check the code length: under **Authentication**, open the **Email** provider settings (in **Sign In / Providers**, click **Email**) and make sure **Email OTP length** is **6**. Change it to 6 and save if it shows something else.
+4. **Required check: the code length must be 6.** Under **Authentication**, open the **Email** provider settings (in **Sign In / Providers**, click **Email**) and make sure **Email OTP length** is **6**. Change it to 6 and save if it shows something else. (The app also accepts 7 or 8 digits, but 6 is what the sign-in screen is designed around.)
 
-### 5. Invite yourself (the parent)
+### 6. Invite yourself (the parent)
 
-**About email limits.** Supabase's built-in email sender only delivers to people who are members of your Supabase organization's team, and only a few emails per hour. The simplest path is to invite the same email address you use to sign in to Supabase. That address is already on the team, so it just works.
+With Resend set up (step 4), invites and codes can go to any email address. To add a second parent later, invite their address the same way.
 
-To add a second parent, either add their email to the organization team first (click your organization name, then **Team**, then **Invite**), or set up your own email sender under **Project Settings**, then **Authentication**, then **SMTP Settings**. If a code does not arrive, wait a bit; you may have hit the hourly limit.
+If a code does not arrive, check the spam folder, then the **Logs** (or **Emails**) page in Resend to see whether it was sent.
 
 1. Click **Authentication**, then **Users**.
 2. Click **Add user**, then **Invite user**.
 3. Type the parent email address and click **Invite**.
-4. Open the invite email and click its link once. That accepts the invite and confirms the account. After this, signing in to SpellKick sends the 6-digit code.
+4. Open the invite email and click its link once. That accepts the invite and confirms the account. After this, signing in to SpellKick sends a code.
 
-### 6. Copy the two keys into Vercel and your computer
+### 7. Copy the two keys into Vercel and your computer
 
 1. Click **Project Settings** (the gear icon), then **Data API** (or **API**). Copy the **Project URL**.
 2. Then open **API Keys** and copy the **Publishable key** (it starts with `sb_publishable_`). Older projects show an **anon public** key instead, sometimes under a **Legacy** tab; use that if there is no Publishable key.

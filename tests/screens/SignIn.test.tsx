@@ -31,7 +31,7 @@ describe('SignIn', () => {
       options: { shouldCreateUser: false },
     });
 
-    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.type(await screen.findByLabelText('Code from the email'), '123456');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(auth.verifyOtp).toHaveBeenCalledWith({
       email: 'mom@example.com',
@@ -40,6 +40,29 @@ describe('SignIn', () => {
     });
     expect(await screen.findByText(/No kids yet/)).toBeInTheDocument();
     expect(window.location.pathname).toBe('/profiles');
+  });
+
+  it.each(['123456', '1234567', '12345678'])('accepts the code %s (Supabase codes are 6 to 8 digits)', async (code) => {
+    const auth = stubAuth();
+    const user = userEvent.setup();
+    render(<App repo={createMemoryRepo()} authClient={auth} />);
+    await user.type(await screen.findByLabelText('Email'), 'mom@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('Code from the email'), code);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ email: 'mom@example.com', token: code, type: 'email' });
+  });
+
+  it('keeps Sign in off under 6 digits and stops at 8', async () => {
+    const user = userEvent.setup();
+    render(<App repo={createMemoryRepo()} authClient={stubAuth()} />);
+    await user.type(await screen.findByLabelText('Email'), 'mom@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    const input = await screen.findByLabelText('Code from the email');
+    await user.type(input, '12345');
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    await user.type(input, '6789');
+    expect(input).toHaveValue('12345678');
   });
 
   it('tells an unknown email it is not set up', async () => {
@@ -53,7 +76,7 @@ describe('SignIn', () => {
     await user.type(await screen.findByLabelText('Email'), 'stranger@example.com');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     expect(await screen.findByText("This email isn't set up for SpellKick.")).toBeInTheDocument();
-    expect(screen.queryByLabelText('6-digit code')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Code from the email')).not.toBeInTheDocument();
   });
 
   it('shows an error and stays put when the code is wrong', async () => {
@@ -64,7 +87,7 @@ describe('SignIn', () => {
 
     await user.type(await screen.findByLabelText('Email'), 'mom@example.com');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
-    await user.type(await screen.findByLabelText('6-digit code'), '000000');
+    await user.type(await screen.findByLabelText('Code from the email'), '000000');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText(/That code didn't work/)).toBeInTheDocument();
     expect(window.location.pathname).toBe('/signin');
@@ -87,7 +110,7 @@ describe('SignIn', () => {
     render(<App repo={repo} authClient={auth} />);
     await user.type(await screen.findByLabelText('Email'), 'mom@example.com');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
-    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.type(await screen.findByLabelText('Code from the email'), '123456');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await screen.findByText(/No kids yet/);
     await vi.waitFor(async () => expect(await mem.listAttempts('p1')).toHaveLength(1));

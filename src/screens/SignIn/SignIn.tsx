@@ -71,17 +71,17 @@ export function SignIn() {
           <form onSubmit={onVerify} className="space-y-4">
             <p className="text-slate-600">We sent a code to {email.trim()}.</p>
             <label className="block font-semibold text-slate-700">
-              6-digit code
+              Code from the email
               <input
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
+                maxLength={8}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 className={`${inputClass} tracking-[0.5em]`}
               />
             </label>
-            <button type="submit" disabled={busy || code.length !== 6} className={buttonClass}>
+            <button type="submit" disabled={busy || code.length < 6} className={buttonClass}>
               Sign in
             </button>
             <button

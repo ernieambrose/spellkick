@@ -324,13 +324,13 @@ describe('Forgot / change parent PIN', () => {
     expect(auth.signInWithOtp).toHaveBeenCalledWith({ email: 'mom@example.com', options: { shouldCreateUser: false } });
 
     auth.verifyOtp.mockResolvedValueOnce({ error: { message: 'Token has expired or is invalid' } });
-    await user.type(await screen.findByLabelText('6-digit code'), '000000');
+    await user.type(await screen.findByLabelText('Code from the email'), '000000');
     await user.click(screen.getByRole('button', { name: 'Verify' }));
     expect(await screen.findByText(/That code didn't work/)).toBeInTheDocument();
-    expect(screen.getByLabelText('6-digit code')).toBeInTheDocument();
+    expect(screen.getByLabelText('Code from the email')).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText('6-digit code'));
-    await user.type(screen.getByLabelText('6-digit code'), '123456');
+    await user.clear(screen.getByLabelText('Code from the email'));
+    await user.type(screen.getByLabelText('Code from the email'), '123456');
     await user.click(screen.getByRole('button', { name: 'Verify' }));
     expect(auth.verifyOtp).toHaveBeenLastCalledWith({ email: 'mom@example.com', token: '123456', type: 'email' });
 
@@ -343,6 +343,22 @@ describe('Forgot / change parent PIN', () => {
     const stored = await repo.getParentPinHash();
     expect(stored).toBe(await hashPin('5678', 'owner-1'));
     expect(stored).not.toBe(await hashPin(PARENT_PIN, 'owner-1'));
+  });
+
+  it('Forgot PIN? accepts an 8-digit code but not 5 digits', async () => {
+    const repo = await repoWith([profile()]);
+    const auth = stubAuth({ signedIn: true, email: 'mom@example.com' });
+    const user = renderAt('/parent', repo, auth);
+    await user.click(await screen.findByRole('button', { name: 'Forgot PIN?' }));
+    await user.click(await screen.findByRole('button', { name: 'Email me a code' }));
+    const input = await screen.findByLabelText('Code from the email');
+    await user.type(input, '12345');
+    expect(screen.getByRole('button', { name: 'Verify' })).toBeDisabled();
+    await user.type(input, '6789');
+    expect(input).toHaveValue('12345678');
+    await user.click(screen.getByRole('button', { name: 'Verify' }));
+    expect(auth.verifyOtp).toHaveBeenLastCalledWith({ email: 'mom@example.com', token: '12345678', type: 'email' });
+    expect(await screen.findByText('Set a parent PIN')).toBeInTheDocument();
   });
 
   it('in demo mode (no auth client), Forgot PIN? goes straight to setting a new PIN', async () => {
