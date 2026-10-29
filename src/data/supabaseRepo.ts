@@ -19,10 +19,22 @@ import {
 import { fetchAllPages } from './paging';
 import type { Repo } from './repo';
 
+/** An error from Supabase that keeps the Postgres code and HTTP status so callers can tell permanent failures from transient ones. */
+export class SupabaseRepoError extends Error {
+  code?: string;
+  status?: number;
+  constructor(message: string, code?: string, status?: number) {
+    super(message);
+    this.name = 'SupabaseRepoError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 // Row-level security limits every query to the signed-in parent's rows (owner = auth.uid()).
 export function createSupabaseRepo(db: SupabaseClient): Repo {
-  function check<T>(res: { data: T; error: { message: string } | null }): T {
-    if (res.error) throw new Error(res.error.message);
+  function check<T>(res: { data: T; error: { message: string; code?: string } | null; status?: number }): T {
+    if (res.error) throw new SupabaseRepoError(res.error.message, res.error.code, res.status);
     return res.data;
   }
 

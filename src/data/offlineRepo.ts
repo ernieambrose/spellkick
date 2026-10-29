@@ -25,6 +25,14 @@ type NewItem = QueueItem extends infer T ? (T extends QueueItem ? Omit<T, 'seq'>
 export type OfflineRepo = Repo & { flush(): Promise<void>; pending(): Promise<number> };
 
 const QUEUE_KEY = 'queue';
+const DEADLETTER_KEY = 'deadletter';
+
+/** Permanent: retrying can never succeed (constraint/RLS violation, or a 4xx other than auth/timeout/rate-limit). */
+function isPermanent(err: unknown): boolean {
+  const { code, status } = (err ?? {}) as { code?: unknown; status?: unknown };
+  if (typeof code === 'string' && (code.startsWith('23') || code === '42501')) return true;
+  return typeof status === 'number' && status >= 400 && status < 500 && ![401, 408, 429].includes(status);
+}
 const readKey = (name: string, arg = '') => `read:${name}:${arg}`;
 
 /** Merge by key; later list entries (pending writes) win. */
@@ -39,20 +47,35 @@ export function createOfflineRepo(inner: Repo, store: KeyValueStore): OfflineRep
   let queue: QueueItem[] = [];
   let nextSeq = 1;
   const loaded = (async () => {
-    const saved = (await store.get(QUEUE_KEY)) as QueueItem[] | undefined;
-    if (saved?.length) {
-      // Anything queued before the load finished sits after the saved items.
-      queue = [...saved, ...queue];
-      nextSeq = Math.max(nextSeq, ...saved.map((i) => i.seq + 1));
+    try {
+      const saved = (await store.get(QUEUE_KEY)) as QueueItem[] | undefined;
+      if (saved?.length) {
+        // Anything queued before the load finished sits after the saved items.
+        queue = [...saved, ...queue];
+        nextSeq = Math.max(nextSeq, ...saved.map((i) => i.seq + 1));
+      }
+    } catch (err) {
+      console.warn('offlineRepo: could not load the saved queue, starting empty', err);
     }
   })();
-  const persist = () => store.set(QUEUE_KEY, queue);
+  const persist = () =>
+    store.set(QUEUE_KEY, queue).catch((err) => console.warn('offlineRepo: could not persist the queue', err));
+
+  async function deadLetter(item: QueueItem, err: unknown) {
+    console.warn('offlineRepo: dropping an item the server permanently rejected', item, err);
+    try {
+      const dead = ((await store.get(DEADLETTER_KEY)) as QueueItem[] | undefined) ?? [];
+      await store.set(DEADLETTER_KEY, [...dead, item]);
+    } catch (e) {
+      console.warn('offlineRepo: could not save the dead letter', e);
+    }
+  }
 
   async function enqueue(item: NewItem) {
     await loaded;
     queue.push({ ...item, seq: nextSeq++ } as QueueItem);
     await persist();
-    await flush().catch(() => {}); // a failed send stays queued
+    await flush(); // a failed send stays queued; flush never rejects
   }
 
   function send(item: QueueItem): Promise<void> {
@@ -77,8 +100,12 @@ export function createOfflineRepo(inner: Repo, store: KeyValueStore): OfflineRep
           const head = queue[0];
           try {
             await send(head);
-          } catch {
-            return; // offline or server error: keep it and everything behind it
+          } catch (err) {
+            if (!isPermanent(err)) {
+              console.warn('offlineRepo: send failed, will retry', err);
+              return; // offline or server error: keep it and everything behind it
+            }
+            await deadLetter(head, err);
           }
           queue = queue.filter((i) => i.seq !== head.seq);
           await persist();
@@ -172,7 +199,19 @@ export function createOfflineRepo(inner: Repo, store: KeyValueStore): OfflineRep
 
     saveList: (l) => inner.saveList(l),
     deleteList: (id) => inner.deleteList(id),
-    deleteProfile: (id) => inner.deleteProfile(id),
+    deleteProfile: async (id) => {
+      await inner.deleteProfile(id);
+      await loaded;
+      // Queued writes for a deleted kid would fail RLS, or (saveProfile) resurrect them.
+      const forProfile = (i: QueueItem) =>
+        i.kind === 'profile'
+          ? i.data.id === id
+          : i.kind === 'session'
+            ? i.data.profileId === id
+            : i.data.every((x) => x.profileId === id);
+      queue = queue.filter((i) => !forProfile(i));
+      await persist();
+    },
     setParentPinHash: (h) => inner.setParentPinHash(h),
 
     flush,

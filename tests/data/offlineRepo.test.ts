@@ -217,4 +217,92 @@ describe('createOfflineRepo', () => {
     // 3 attempts but only 2 distinct days: not mastered
     expect(deriveWordState(all)).toBe('learning');
   });
+
+  describe('failure handling', () => {
+    beforeEach(() => void vi.spyOn(console, 'warn').mockImplementation(() => {}));
+    afterEach(() => vi.restoreAllMocks());
+
+    const failing = (inner: Repo, failId: string, err: unknown): Repo => ({
+      ...inner,
+      addAttempts: async (a) => {
+        if (a[0].id === failId) throw err;
+        return inner.addAttempts(a);
+      },
+    });
+
+    it('dead-letters a permanently rejected head item and still sends the next', async () => {
+      const mem = createMemoryRepo();
+      const store = mapStore();
+      const offline = createOfflineRepo(
+        failing(mem, 'bad', Object.assign(new Error('rls'), { code: '42501', status: 403 })),
+        store,
+      );
+      await offline.addAttempts([attempt({ id: 'bad' })]);
+      await offline.addAttempts([attempt({ id: 'good' })]);
+      expect((await mem.listAttempts('p1')).map((a) => a.id)).toEqual(['good']);
+      expect(await offline.pending()).toBe(0);
+      expect(((await store.get('deadletter')) as unknown[]).length).toBe(1);
+    });
+
+    it.each([
+      ['a 23xxx code', { code: '23503' }],
+      ['a 4xx status', { status: 400 }],
+    ])('treats %s as permanent', async (_n, extra) => {
+      const mem = createMemoryRepo();
+      const offline = createOfflineRepo(failing(mem, 'bad', Object.assign(new Error('x'), extra)), mapStore());
+      await offline.addAttempts([attempt({ id: 'bad' })]);
+      expect(await offline.pending()).toBe(0);
+    });
+
+    it.each([
+      ['a network error', new Error('Failed to fetch')],
+      ['a 500', Object.assign(new Error('x'), { status: 500 })],
+      ['a 401', Object.assign(new Error('x'), { status: 401 })],
+      ['a 429', Object.assign(new Error('x'), { status: 429 })],
+    ])('keeps %s queued and stops the flush', async (_n, err) => {
+      const mem = createMemoryRepo();
+      const offline = createOfflineRepo(failing(mem, 'bad', err), mapStore());
+      await offline.addAttempts([attempt({ id: 'bad' })]);
+      await offline.addAttempts([attempt({ id: 'after' })]);
+      expect(await offline.pending()).toBe(2);
+      expect(await mem.listAttempts('p1')).toHaveLength(0);
+    });
+
+    it('purges a deleted profile\'s queued items so it is not resurrected', async () => {
+      const mem = createMemoryRepo();
+      const { repo, state } = flaky(mem);
+      await mem.saveProfile(profile);
+      const offline = createOfflineRepo(repo, mapStore());
+      state.down = true;
+      await offline.saveProfile({ ...profile, name: 'Renamed' });
+      await offline.addAttempts([attempt()]);
+      await offline.saveSession(session());
+      await offline.addAwards([award('first-kick')]);
+      await offline.addAttempts([attempt({ profileId: 'other' })]);
+      state.down = false;
+      await offline.deleteProfile('p1');
+      expect(await offline.pending()).toBe(1);
+      await offline.flush();
+      expect(await mem.listProfiles()).toEqual([]);
+      expect(await mem.listAttempts('p1')).toEqual([]);
+      expect(await mem.listAttempts('other')).toHaveLength(1);
+    });
+
+    it('still sends writes when the store cannot be read', async () => {
+      const mem = createMemoryRepo();
+      const store: KeyValueStore = { ...mapStore(), get: () => Promise.reject(new Error('idb')) };
+      const offline = createOfflineRepo(mem, store);
+      await offline.addAttempts([attempt()]);
+      expect(await mem.listAttempts('p1')).toHaveLength(1);
+    });
+
+    it('still sends writes when the store cannot be written', async () => {
+      const mem = createMemoryRepo();
+      const store: KeyValueStore = { ...mapStore(), set: () => Promise.reject(new Error('idb')) };
+      const offline = createOfflineRepo(mem, store);
+      await offline.addAttempts([attempt()]);
+      expect(await mem.listAttempts('p1')).toHaveLength(1);
+      expect(await offline.pending()).toBe(0);
+    });
+  });
 });
