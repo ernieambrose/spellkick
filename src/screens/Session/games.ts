@@ -2,7 +2,7 @@ import type { ComponentType } from 'react';
 import type { SessionWord } from '../../engine/selection';
 import type { AttemptKind, GameId } from '../../engine/types';
 import { Scramble } from '../Games/Scramble';
-import { PlaceholderGame } from './PlaceholderGame';
+import { SpotMisspelling } from '../Games/SpotMisspelling';
 
 export interface GameResult {
   kind: AttemptKind;
@@ -28,8 +28,7 @@ export interface GameProps {
   timerOn: boolean;
 }
 
-// Task 14 replaces the misspell placeholder with the real game.
 export const GAMES: Record<GameId, ComponentType<GameProps>> = {
   scramble: Scramble,
-  misspell: PlaceholderGame,
+  misspell: SpotMisspelling,
 };
