@@ -218,6 +218,45 @@ describe('createOfflineRepo', () => {
     expect(deriveWordState(all)).toBe('learning');
   });
 
+  describe('canSend', () => {
+    it('does not flush while signed out, then sends everything once it can', async () => {
+      const mem = createMemoryRepo();
+      let signedIn = false;
+      const offline = createOfflineRepo(mem, mapStore(), async () => signedIn);
+      await offline.addAttempts([attempt({ id: 'a' })]);
+      await offline.saveSession(session());
+      expect(await offline.pending()).toBe(2);
+      expect(await mem.listAttempts('p1')).toEqual([]);
+      signedIn = true;
+      await offline.flush();
+      expect(await offline.pending()).toBe(0);
+      expect(await mem.listAttempts('p1')).toHaveLength(1);
+      expect(await mem.listSessions('p1')).toHaveLength(1);
+    });
+
+    it('does not send a restored queue on creation without a session (no dead-lettering)', async () => {
+      const mem = createMemoryRepo();
+      const store = mapStore();
+      let calls = 0;
+      const counting: Repo = { ...mem, addAttempts: async () => void calls++ };
+      const down = flaky(mem);
+      down.state.down = true;
+      await createOfflineRepo(down.repo, store).addAttempts([attempt()]);
+      const second = createOfflineRepo(counting, store, async () => false);
+      await second.flush();
+      expect(calls).toBe(0);
+      expect(await second.pending()).toBe(1);
+      expect(await store.get('deadletter')).toBeUndefined();
+    });
+
+    it('treats a throwing canSend as "not now"', async () => {
+      const mem = createMemoryRepo();
+      const offline = createOfflineRepo(mem, mapStore(), () => Promise.reject(new Error('auth')));
+      await offline.addAttempts([attempt()]);
+      expect(await offline.pending()).toBe(1);
+    });
+  });
+
   describe('failure handling', () => {
     beforeEach(() => void vi.spyOn(console, 'warn').mockImplementation(() => {}));
     afterEach(() => vi.restoreAllMocks());
@@ -258,6 +297,7 @@ describe('createOfflineRepo', () => {
       ['a network error', new Error('Failed to fetch')],
       ['a 500', Object.assign(new Error('x'), { status: 500 })],
       ['a 401', Object.assign(new Error('x'), { status: 401 })],
+      ['an RLS 42501 sent with the anon key (401)', Object.assign(new Error('rls'), { code: '42501', status: 401 })],
       ['a 429', Object.assign(new Error('x'), { status: 429 })],
     ])('keeps %s queued and stops the flush', async (_n, err) => {
       const mem = createMemoryRepo();

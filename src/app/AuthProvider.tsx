@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isOfflineRepo } from '../data/offlineRepo';
 import { AuthContext, type AuthContextValue, type AuthStatus } from './authContext';
 import { defaultAuthClient, type AuthClient } from './authClient';
+import { RepoContext } from './repoContext';
 
 interface Props {
   client?: AuthClient | null; // undefined = the Supabase client (or demo mode when unconfigured)
@@ -10,6 +12,7 @@ interface Props {
 export function AuthProvider({ client: clientProp, children }: Props) {
   const client = clientProp === undefined ? defaultAuthClient : clientProp;
   const [status, setStatus] = useState<AuthStatus>(client ? 'loading' : 'signedIn');
+  const repo = useContext(RepoContext);
 
   useEffect(() => {
     if (!client) return;
@@ -37,7 +40,10 @@ export function AuthProvider({ client: clientProp, children }: Props) {
       async verifyCode(email, token) {
         if (!client) return { error: null };
         const res = await client.verifyOtp({ email, token, type: 'email' });
-        if (!res.error) setStatus('signedIn');
+        if (!res.error) {
+          setStatus('signedIn');
+          if (repo && isOfflineRepo(repo)) void repo.flush(); // practice queued while signed out
+        }
         return res;
       },
       async signOut() {
@@ -51,7 +57,7 @@ export function AuthProvider({ client: clientProp, children }: Props) {
         return { id: s.userId ?? null, email: s.email ?? null };
       },
     }),
-    [client, status],
+    [client, status, repo],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

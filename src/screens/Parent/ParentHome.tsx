@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/authContext';
 import { useActiveProfile } from '../../app/profileContext';
 import { useRepo } from '../../app/repoContext';
+import { isOfflineRepo } from '../../data/offlineRepo';
 import { localDate } from '../../engine/streak';
 import type { Profile, WordList } from '../../engine/types';
 import { groupLists } from './listGroups';
@@ -23,6 +24,8 @@ export function ParentHome() {
   const [kids, setKids] = useState<KidLists[] | null>(null);
   const [today, setToday] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
+  const [unsynced, setUnsynced] = useState(false); // asking "Sign out anyway?"
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -43,7 +46,16 @@ export function ParentHome() {
     };
   }, [repo]);
 
-  async function handleSignOut() {
+  async function handleSignOut(force = false) {
+    setSigningOut(true);
+    if (!force && isOfflineRepo(repo)) {
+      await repo.flush(); // send what we can while the session still exists
+      if ((await repo.pending()) > 0) {
+        setSigningOut(false);
+        setUnsynced(true);
+        return;
+      }
+    }
     clear();
     await signOut();
     navigate('/signin');
@@ -56,10 +68,31 @@ export function ParentHome() {
         <Link to="/profiles" className={secondaryButton}>
           Back to kids
         </Link>
-        <button type="button" onClick={() => void handleSignOut()} className={secondaryButton}>
+        <button
+          type="button"
+          disabled={signingOut}
+          onClick={() => void handleSignOut()}
+          className={secondaryButton}
+        >
           Sign out
         </button>
       </header>
+
+      {unsynced && (
+        <Card>
+          <p role="alert" className="font-semibold text-tricky-text">
+            Some practice hasn't synced yet. Sign out anyway?
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" onClick={() => void handleSignOut(true)} className={primaryButton}>
+              Sign out anyway
+            </button>
+            <button type="button" onClick={() => setUnsynced(false)} className={secondaryButton}>
+              Cancel
+            </button>
+          </div>
+        </Card>
+      )}
 
       {loadFailed && <p className="text-tricky-text">Couldn't load your kids. Check your connection.</p>}
 

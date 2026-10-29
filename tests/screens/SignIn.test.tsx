@@ -2,6 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App';
 import { createMemoryRepo } from '../../src/data/memoryRepo';
+import { createOfflineRepo, type KeyValueStore } from '../../src/data/offlineRepo';
+import type { Attempt } from '../../src/engine/types';
 import { stubAuth } from '../helpers/auth';
 
 beforeEach(() => {
@@ -66,5 +68,29 @@ describe('SignIn', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText(/That code didn't work/)).toBeInTheDocument();
     expect(window.location.pathname).toBe('/signin');
+  });
+
+  it('sends practice queued while signed out as soon as the code is verified', async () => {
+    const m = new Map<string, unknown>();
+    const store: KeyValueStore = { get: async (k) => m.get(k), set: async (k, v) => void m.set(k, v), del: async (k) => void m.delete(k) };
+    const mem = createMemoryRepo();
+    const auth = stubAuth();
+    const repo = createOfflineRepo(mem, store, async () => (await auth.getSession()).signedIn);
+    const queued: Attempt = {
+      id: 'a1', profileId: 'p1', sessionId: 's1', word: 'rhythm', listId: null, game: 'scramble',
+      kind: 'clean', ms: null, localDate: '2026-10-28', createdAt: '2026-10-28T12:00:00.000Z',
+    };
+    await repo.addAttempts([queued]);
+    expect(await repo.pending()).toBe(1);
+
+    const user = userEvent.setup();
+    render(<App repo={repo} authClient={auth} />);
+    await user.type(await screen.findByLabelText('Email'), 'mom@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await screen.findByText(/No kids yet/);
+    await vi.waitFor(async () => expect(await mem.listAttempts('p1')).toHaveLength(1));
+    expect(await repo.pending()).toBe(0);
   });
 });

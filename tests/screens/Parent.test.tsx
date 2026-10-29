@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App';
 import { createMemoryRepo } from '../../src/data/memoryRepo';
+import { createOfflineRepo, type KeyValueStore } from '../../src/data/offlineRepo';
 import type { Repo } from '../../src/data/repo';
 import { hashPin } from '../../src/engine/pin';
 import { localDate } from '../../src/engine/streak';
@@ -65,6 +66,11 @@ async function typePin(user: ReturnType<typeof userEvent.setup>, pin: string) {
   for (const d of pin) await user.click(await screen.findByRole('button', { name: d }));
 }
 
+const mapStore = (): KeyValueStore => {
+  const m = new Map<string, unknown>();
+  return { get: async (k) => m.get(k), set: async (k, v) => void m.set(k, v), del: async (k) => void m.delete(k) };
+};
+
 beforeEach(() => localStorage.clear());
 
 describe('Parent gate', () => {
@@ -105,6 +111,43 @@ describe('Parent gate', () => {
     expect(await screen.findByLabelText('Email')).toBeInTheDocument();
     expect(window.location.pathname).toBe('/signin');
     expect(localStorage.getItem('spellkick.activeProfile')).toBeNull();
+  });
+
+  it('Sign out sends unsynced practice first, then signs out without asking', async () => {
+    const mem = await repoWith([profile()]);
+    let canSend = false;
+    const repo = createOfflineRepo(mem, mapStore(), async () => canSend);
+    await repo.addAttempts([attempt('p1', 'rhythm', '2026-10-28')]);
+    canSend = true;
+    const user = renderAt('/parent', repo);
+    await typePin(user, PARENT_PIN);
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+    expect(await mem.listAttempts('p1')).toHaveLength(1);
+  });
+
+  it('Sign out warns when practice still has not synced, and only signs out on confirm', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const mem = await repoWith([profile()]);
+    const down: Repo = { ...mem, addAttempts: () => Promise.reject(new Error('network down')) };
+    const repo = createOfflineRepo(down, mapStore());
+    await repo.addAttempts([attempt('p1', 'rhythm', '2026-10-28')]);
+    const auth = stubAuth({ signedIn: true });
+    const user = renderAt('/parent', repo, auth);
+    await typePin(user, PARENT_PIN);
+
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByText("Some practice hasn't synced yet. Sign out anyway?")).toBeInTheDocument();
+    expect(auth.signOut).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText(/hasn't synced yet/)).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe('/parent');
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await user.click(await screen.findByRole('button', { name: 'Sign out anyway' }));
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+    expect(auth.signOut).toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 });
 

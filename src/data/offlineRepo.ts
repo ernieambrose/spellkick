@@ -24,12 +24,17 @@ type NewItem = QueueItem extends infer T ? (T extends QueueItem ? Omit<T, 'seq'>
 
 export type OfflineRepo = Repo & { flush(): Promise<void>; pending(): Promise<number> };
 
+/** Lets screens that don't build the repo (sign-in, sign-out) reach the queue when there is one. */
+export const isOfflineRepo = (r: Repo): r is OfflineRepo =>
+  typeof (r as Partial<OfflineRepo>).flush === 'function' && typeof (r as Partial<OfflineRepo>).pending === 'function';
+
 const QUEUE_KEY = 'queue';
 const DEADLETTER_KEY = 'deadletter';
 
 /** Permanent: retrying can never succeed (constraint/RLS violation, or a 4xx other than auth/timeout/rate-limit). */
 function isPermanent(err: unknown): boolean {
   const { code, status } = (err ?? {}) as { code?: unknown; status?: unknown };
+  if (status === 401) return false; // sent without a session (an RLS 42501 with the anon key): retry once signed in
   if (typeof code === 'string' && (code.startsWith('23') || code === '42501')) return true;
   return typeof status === 'number' && status >= 400 && status < 500 && ![401, 408, 429].includes(status);
 }
@@ -43,7 +48,15 @@ function mergeBy<T>(base: T[], pending: T[], key: (x: T) => string): T[] {
   return [...m.values()];
 }
 
-export function createOfflineRepo(inner: Repo, store: KeyValueStore): OfflineRepo {
+/**
+ * `canSend` says whether the server can accept writes right now (Supabase: a session exists).
+ * Without one every write is sent with the anon key and rejected by RLS, so flushing waits.
+ */
+export function createOfflineRepo(
+  inner: Repo,
+  store: KeyValueStore,
+  canSend: () => Promise<boolean> = async () => true,
+): OfflineRepo {
   let queue: QueueItem[] = [];
   let nextSeq = 1;
   const loaded = (async () => {
@@ -96,6 +109,7 @@ export function createOfflineRepo(inner: Repo, store: KeyValueStore): OfflineRep
     inFlight ??= (async () => {
       await loaded;
       try {
+        if (queue.length === 0 || !(await canSend().catch(() => false))) return;
         while (queue.length > 0) {
           const head = queue[0];
           try {

@@ -8,7 +8,16 @@ import { supabase } from './supabase';
 
 // Without Supabase env vars, fall back to an in-memory repo so `npm run dev` works (demo mode).
 const demoMode = supabase === null;
-const defaultRepo: Repo = supabase ? createOfflineRepo(createSupabaseRepo(supabase), idbStore) : createMemoryRepo();
+function createDefaultRepo(): Repo {
+  const db = supabase;
+  if (!db) return createMemoryRepo();
+  // Queued writes wait for a session: sent with the anon key, RLS would reject them.
+  return createOfflineRepo(createSupabaseRepo(db), idbStore, async () => {
+    const { data } = await db.auth.getSession();
+    return data.session !== null;
+  });
+}
+const defaultRepo = createDefaultRepo();
 
 interface Props {
   repo?: Repo; // injected in tests
