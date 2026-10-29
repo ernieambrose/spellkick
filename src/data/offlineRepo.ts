@@ -18,7 +18,8 @@ type QueueItem =
   | { seq: number; kind: 'attempts'; data: Attempt[] }
   | { seq: number; kind: 'session'; data: Session }
   | { seq: number; kind: 'awards'; data: Award[] }
-  | { seq: number; kind: 'profile'; data: Profile };
+  | { seq: number; kind: 'profile'; data: Profile }
+  | { seq: number; kind: 'level'; data: { profileId: string; level: number } };
 
 type NewItem = QueueItem extends infer T ? (T extends QueueItem ? Omit<T, 'seq'> : never) : never;
 
@@ -101,6 +102,8 @@ export function createOfflineRepo(
         return inner.addAwards(item.data);
       case 'profile':
         return inner.saveProfile(item.data);
+      case 'level':
+        return inner.setGeneratedLevel(item.data.profileId, item.data.level);
     }
   }
 
@@ -173,13 +176,21 @@ export function createOfflineRepo(
   void flush();
   if (typeof window !== 'undefined') window.addEventListener('online', () => void flush());
 
+  /** Apply queued level changes on top of the profiles (latest wins). */
+  async function withPendingLevels(profiles: Profile[]): Promise<Profile[]> {
+    const levels = new Map((await pendingOf('level')).map((i) => [i.data.profileId, i.data.level]));
+    return profiles.map((p) => (levels.has(p.id) ? { ...p, generatedLevel: levels.get(p.id)! } : p));
+  }
+
   return {
-    listProfiles: () =>
-      mergedRead(
-        readKey('listProfiles'),
-        () => inner.listProfiles(),
-        async () => (await pendingOf('profile')).map((i) => i.data),
-        (p) => p.id,
+    listProfiles: async () =>
+      withPendingLevels(
+        await mergedRead(
+          readKey('listProfiles'),
+          () => inner.listProfiles(),
+          async () => (await pendingOf('profile')).map((i) => i.data),
+          (p) => p.id,
+        ),
       ),
     listLists: (profileId) =>
       cachedRead(readKey('listLists', profileId), () => inner.listLists(profileId)),
@@ -207,6 +218,7 @@ export function createOfflineRepo(
     getParentPinHash: () => cachedRead(readKey('getParentPinHash'), () => inner.getParentPinHash()),
 
     saveProfile: (data) => enqueue({ kind: 'profile', data }),
+    setGeneratedLevel: (profileId, level) => enqueue({ kind: 'level', data: { profileId, level } }),
     addAttempts: (data) => enqueue({ kind: 'attempts', data }),
     saveSession: (data) => enqueue({ kind: 'session', data }),
     addAwards: (data) => enqueue({ kind: 'awards', data }),
@@ -217,12 +229,17 @@ export function createOfflineRepo(
       await inner.deleteProfile(id);
       await loaded;
       // Queued writes for a deleted kid would fail RLS, or (saveProfile) resurrect them.
-      const forProfile = (i: QueueItem) =>
-        i.kind === 'profile'
-          ? i.data.id === id
-          : i.kind === 'session'
-            ? i.data.profileId === id
-            : i.data.every((x) => x.profileId === id);
+      const forProfile = (i: QueueItem) => {
+        switch (i.kind) {
+          case 'profile':
+            return i.data.id === id;
+          case 'session':
+          case 'level':
+            return i.data.profileId === id;
+          default:
+            return i.data.every((x) => x.profileId === id);
+        }
+      };
       queue = queue.filter((i) => !forProfile(i));
       await persist();
     },

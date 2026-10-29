@@ -32,6 +32,10 @@ export function createMemoryRepo(): Repo {
       dropProfile(sessions, id);
       dropProfile(awards, id);
     },
+    async setGeneratedLevel(profileId, level) {
+      const p = profiles.get(profileId);
+      if (p) profiles.set(profileId, { ...p, generatedLevel: level });
+    },
     async listLists(profileId) {
       return forProfile(lists, profileId).map(copyList);
     },

@@ -122,6 +122,15 @@ describe('useSession', () => {
     );
   });
 
+  it('keeps a parent edit made mid-session when the level moves at session end', async () => {
+    const { repo, hook } = await setup();
+    expect(hook.result.current.words.every((w) => w.listId === null)).toBe(true);
+    await repo.saveProfile({ ...felix, name: 'Felix R', timerOn: false }); // parent edits during play
+    answerAll(hook);
+    await waitFor(async () => expect((await repo.listProfiles())[0].generatedLevel).toBe(6));
+    expect((await repo.listProfiles())[0]).toMatchObject({ name: 'Felix R', timerOn: false });
+  });
+
   it('does not move the generated level in a session with no generated words', async () => {
     const mk = (id: string, words: string[], testDate: string | null): WordList => ({
       id,

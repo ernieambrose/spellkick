@@ -274,7 +274,7 @@ export function useSession(game: GameId, opts: SessionOptions = {}): SessionStat
           attempts.filter((a) => a.listId === null),
         );
         if (level !== setup.profile.generatedLevel) {
-          repo.saveProfile({ ...setup.profile, generatedLevel: level }).catch(ignore);
+          repo.setGeneratedLevel(setup.profile.id, level).catch(ignore);
         }
       }
     } catch {

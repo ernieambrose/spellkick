@@ -58,6 +58,9 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
     async deleteProfile(id) {
       check(await db.from('profiles').delete().eq('id', id));
     },
+    async setGeneratedLevel(profileId, level) {
+      check(await db.from('profiles').update({ generated_level: level }).eq('id', profileId));
+    },
     async listLists(profileId) {
       const rows = await fetchAllPages<WordListRow>((from, to) =>
         db.from('word_lists').select('*').eq('profile_id', profileId).order('created_at').order('id').range(from, to),

@@ -218,6 +218,32 @@ describe('createOfflineRepo', () => {
     expect(deriveWordState(all)).toBe('learning');
   });
 
+  describe('setGeneratedLevel', () => {
+    it('sends only the level, so a parent edit to the profile is kept', async () => {
+      const mem = createMemoryRepo();
+      await mem.saveProfile(profile);
+      const offline = createOfflineRepo(mem, mapStore());
+      await mem.saveProfile({ ...profile, name: 'Felix R', timerOn: true }); // parent edit on another device
+      await offline.setGeneratedLevel('p1', 4);
+      expect(await mem.listProfiles()).toEqual([{ ...profile, name: 'Felix R', timerOn: true, generatedLevel: 4 }]);
+    });
+
+    it('queues offline, shows the pending level in reads, and sends it on recovery', async () => {
+      const mem = createMemoryRepo();
+      await mem.saveProfile(profile);
+      const { repo, state } = flaky(mem);
+      const offline = createOfflineRepo(repo, mapStore());
+      await offline.listProfiles();
+      state.down = true;
+      await offline.setGeneratedLevel('p1', 5);
+      expect(await offline.pending()).toBe(1);
+      expect((await offline.listProfiles())[0].generatedLevel).toBe(5);
+      state.down = false;
+      await offline.flush();
+      expect((await mem.listProfiles())[0].generatedLevel).toBe(5);
+    });
+  });
+
   describe('canSend', () => {
     it('does not flush while signed out, then sends everything once it can', async () => {
       const mem = createMemoryRepo();
@@ -318,6 +344,7 @@ describe('createOfflineRepo', () => {
       await offline.addAttempts([attempt()]);
       await offline.saveSession(session());
       await offline.addAwards([award('first-kick')]);
+      await offline.setGeneratedLevel('p1', 4);
       await offline.addAttempts([attempt({ profileId: 'other' })]);
       state.down = false;
       await offline.deleteProfile('p1');

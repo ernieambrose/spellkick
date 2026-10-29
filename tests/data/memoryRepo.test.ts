@@ -158,4 +158,12 @@ describe('createMemoryRepo', () => {
     await repo.setParentPinHash('def');
     expect(await repo.getParentPinHash()).toBe('def');
   });
+
+  it('setGeneratedLevel changes only the level, and ignores an unknown profile', async () => {
+    const repo = createMemoryRepo();
+    await repo.saveProfile(profile());
+    await repo.setGeneratedLevel('p1', 4);
+    await repo.setGeneratedLevel('nobody', 7);
+    expect(await repo.listProfiles()).toEqual([profile({ generatedLevel: 4 })]);
+  });
 });

@@ -4,6 +4,7 @@ export interface Repo {
   listProfiles(): Promise<Profile[]>;
   saveProfile(p: Profile): Promise<void>; // upsert
   deleteProfile(id: string): Promise<void>;
+  setGeneratedLevel(profileId: string, level: number): Promise<void>; // only this field, so other edits survive
   listLists(profileId: string): Promise<WordList[]>;
   saveList(l: WordList): Promise<void>; // upsert (words array included)
   deleteList(id: string): Promise<void>;
