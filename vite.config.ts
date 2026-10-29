@@ -9,6 +9,18 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // txt so the ~1.1 MB public/dictionary.txt is precached for offline play.
+        globPatterns: ['**/*.{js,css,html,svg,png,txt}'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        // Data comes from Supabase through the offline repo; never cache API responses here.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }: { url: URL }) => url.hostname.endsWith('.supabase.co'),
+            handler: 'NetworkOnly',
+          },
+        ],
+      },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'SpellKick',

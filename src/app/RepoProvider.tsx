@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { createMemoryRepo } from '../data/memoryRepo';
+import { createOfflineRepo, idbStore } from '../data/offlineRepo';
 import type { Repo } from '../data/repo';
 import { createSupabaseRepo } from '../data/supabaseRepo';
 import { RepoContext } from './repoContext';
@@ -7,7 +8,7 @@ import { supabase } from './supabase';
 
 // Without Supabase env vars, fall back to an in-memory repo so `npm run dev` works (demo mode).
 const demoMode = supabase === null;
-const defaultRepo: Repo = supabase ? createSupabaseRepo(supabase) : createMemoryRepo();
+const defaultRepo: Repo = supabase ? createOfflineRepo(createSupabaseRepo(supabase), idbStore) : createMemoryRepo();
 
 interface Props {
   repo?: Repo; // injected in tests

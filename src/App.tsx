@@ -6,7 +6,7 @@ import { ProfileProvider } from './app/ProfileProvider';
 import { useActiveProfile } from './app/profileContext';
 import { RepoProvider } from './app/RepoProvider';
 import type { Repo } from './data/repo';
-import { AwardsPlaceholder } from './screens/KidHome/AwardsPlaceholder';
+import { Awards } from './screens/Awards/Awards';
 import { KidHome } from './screens/KidHome/KidHome';
 import { KidRoute } from './screens/KidHome/KidRoute';
 import { ListEditor } from './screens/Parent/ListEditor';
@@ -49,7 +49,7 @@ export default function App({ repo, authClient }: AppProps) {
                 <Route path="/kid/:id" element={<KidRoute />}>
                   <Route index element={<KidHome />} />
                   <Route path="play/:game" element={<SessionShell />} />
-                  <Route path="awards" element={<AwardsPlaceholder />} />
+                  <Route path="awards" element={<Awards />} />
                 </Route>
                 <Route path="/parent" element={<ParentGate />}>
                   <Route index element={<ParentHome />} />
