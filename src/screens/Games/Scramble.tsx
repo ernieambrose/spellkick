@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { speak, speechSupported } from '../../app/speech';
 import { LetterTiles } from '../../components/LetterTiles';
+import { loadDictionary } from '../../engine/dictionary';
 import { seededRng } from '../../engine/rng';
 import { makeScramble } from '../../engine/scramble';
 import type { GameProps } from '../Session/games';
@@ -12,6 +13,8 @@ const MAX_HINTS = 2; // each hint locks one more letter; a scramble always has a
 
 // Uppercase with spaces, hyphens and apostrophes removed: the letters a scramble is made of.
 const letters = (s: string) => s.toUpperCase().replace(/[\s'’-]/g, '');
+
+const sorted = (s: string) => [...s].sort().join('');
 
 function hash(s: string): number {
   let h = 2166136261;
@@ -51,7 +54,23 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const [status, setStatus] = useState<Status>('playing');
   const timers = useRef<number[]>([]);
   const skipped = useRef(false);
+  const dictionary = useRef<Set<string> | null>(null); // null until loaded, or if it can't load
+  const [otherWord, setOtherWord] = useState(false);
   const canSpeak = speechSupported();
+
+  // Only used to recognize a different real word (EARTH for HEART); without it, that's just a wrong try.
+  useEffect(() => {
+    let live = true;
+    loadDictionary().then(
+      (d) => {
+        if (live) dictionary.current = d;
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (tiles === null && !skipped.current) {
@@ -88,10 +107,20 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
     setSlots((s) => s.map((t, k) => (k === i ? null : t)));
   }
 
+  function isOtherWord(guess: string): boolean {
+    return guess !== target && sorted(guess) === sorted(target) && !!dictionary.current?.has(guess.toLowerCase());
+  }
+
   function check(answer: string) {
-    if (letters(answer) === target) {
+    const guess = letters(answer);
+    setOtherWord(false);
+    if (guess === target) {
       setStatus('correct');
       later(SUCCESS_MS, () => onResult({ kind: locked > 0 ? 'hinted' : 'clean' }));
+    } else if (isOtherWord(guess)) {
+      setOtherWord(true); // a real word, just not this one: no try used
+      setSlots((s) => s.map((t, k) => (k < locked ? t : null)));
+      setTyped('');
     } else if (wrong === 0) {
       setWrong(1);
       setShaking(true);
@@ -171,7 +200,8 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
             The word is <span className="text-2xl">{word.word}</span>
           </p>
         )}
-        {playing && wrong === 1 && <p className="text-slate-600">Not quite. One more try!</p>}
+        {playing && otherWord && <p className="text-slate-600">That's a different word — tap Hear it!</p>}
+        {playing && !otherWord && wrong === 1 && <p className="text-slate-600">Not quite. One more try!</p>}
       </div>
 
       <div className="flex flex-wrap justify-center gap-3">
