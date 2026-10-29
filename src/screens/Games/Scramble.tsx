@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useContext, useEffect, useRef, useState, type FormEvent } from 'react';
+import { ProfileContext } from '../../app/profileContext';
+import { readScrambleMode, writeScrambleMode } from '../../app/scrambleMode';
 import { speak, speechSupported } from '../../app/speech';
 import { LetterTiles } from '../../components/LetterTiles';
 import { loadDictionary } from '../../engine/dictionary';
@@ -47,7 +49,11 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   });
   const [slots, setSlots] = useState<(number | null)[]>(() => Array(target.length).fill(null));
   const [typed, setTyped] = useState('');
-  const [typing, setTyping] = useState(false);
+  // Read the context directly (not useActiveProfile) so the game still renders without a provider;
+  // with no profile the choice just isn't remembered.
+  const profileId = useContext(ProfileContext)?.activeId ?? null;
+  const [typing, setTyping] = useState(() => readScrambleMode(profileId) === 'type');
+  const input = useRef<HTMLInputElement>(null);
   const [locked, setLocked] = useState(0);
   const [wrong, setWrong] = useState(0);
   const [shaking, setShaking] = useState(false);
@@ -78,6 +84,10 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
       onSkip();
     }
   }, [tiles, onSkip]);
+
+  useEffect(() => {
+    if (typing) input.current?.focus();
+  }, [typing, tiles]);
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 
@@ -155,6 +165,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
           )}
           <p className="text-2xl font-bold tracking-widest text-review-text">{tiles.join(' ')}</p>
           <input
+            ref={input}
             aria-label="Type the word"
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
@@ -221,7 +232,10 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
         <button
           type="button"
           disabled={!playing}
-          onClick={() => setTyping(!typing)}
+          onClick={() => {
+            setTyping(!typing);
+            writeScrambleMode(profileId, typing ? 'tiles' : 'type');
+          }}
           className={`${pill} border border-slate-300 text-slate-600`}
         >
           {typing ? 'Use tiles' : 'Type instead'}

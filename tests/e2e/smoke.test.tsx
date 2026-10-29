@@ -54,6 +54,9 @@ it('parent sets up a kid and a list, the kid finishes a Scramble session and ear
   // Solve ten words by reading the tiles (the word is never shown before an answer).
   for (let n = 1; n <= 10; n++) {
     expect(await screen.findByText(`${n} of 10`, {}, { timeout: 3000 })).toBeInTheDocument();
+    // Typing mode now sticks from word to word; go back to tiles so the letters can be read from the tray.
+    const useTiles = screen.queryByRole('button', { name: 'Use tiles' });
+    if (useTiles) await user.click(useTiles);
     const tray = within(await screen.findByRole('group', { name: 'Letter tiles' }));
     const tiles = tray
       .getAllByRole('button')
