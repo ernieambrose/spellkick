@@ -293,6 +293,42 @@ describe('Scramble', () => {
       expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'clean' });
     });
 
+    it('typing mode: Check stays disabled until the kid types past the locked prefix', () => {
+      const { onResult } = setup('necessary');
+      fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
+      const input = screen.getByRole('textbox', { name: 'Type the word' });
+      fireEvent.change(input, { target: { value: 'ne' } });
+      fireEvent.click(hintButton());
+      const checkBtn = screen.getByRole('button', { name: 'Check' });
+      expect(checkBtn).toBeDisabled();
+      fireEvent.submit(input);
+      expect(onResult).not.toHaveBeenCalled();
+      fireEvent.change(input, { target: { value: 'NECx' } });
+      expect(checkBtn).toBeEnabled();
+    });
+
+    it('typing mode: a wrong answer keeps the prefix and disables Check', () => {
+      setup('necessary');
+      fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
+      const input = screen.getByRole('textbox', { name: 'Type the word' });
+      fireEvent.click(hintButton()); // locks N
+      fireEvent.change(input, { target: { value: 'Nzzzzzzzz' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+      expect(input).toHaveValue('N');
+      expect(screen.getByRole('button', { name: 'Check' })).toBeDisabled();
+      expect(screen.getByText(/One more try/)).toBeInTheDocument();
+    });
+
+    it('steals a tile placed in a later slot when no spare tile is left (duplicate letters)', () => {
+      setup('balloon');
+      for (const l of ['B', 'A', 'O', 'L', 'L', 'N', 'O']) clickTile(l);
+      expect(trayLetters()).toHaveLength(0);
+      fireEvent.click(hintButton()); // stuck at slot 2: needs L, both Ls are placed later
+      const slots = answer().getAllByRole('button');
+      expect(slots.map((b) => b.textContent)).toEqual(['B', 'A', 'L', '', 'L', 'N', 'O']);
+      expect(trayLetters()).toEqual(['O']);
+    });
+
     it('switching between typing and tiles keeps the locked prefix', () => {
       setup('necessary');
       clickTile('N');

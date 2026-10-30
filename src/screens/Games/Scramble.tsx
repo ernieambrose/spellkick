@@ -182,7 +182,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const full = !slots.includes(null);
   const submitTyped = (e: FormEvent) => {
     e.preventDefault();
-    if (playing && typed.trim()) check(typed);
+    if (playing && letters(typed).length > locked) check(typed);
   };
 
   const pill = 'min-h-12 rounded-full px-6 text-lg font-semibold transition active:scale-95 disabled:opacity-40';
@@ -213,7 +213,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
               status === 'correct' ? 'border-mastered bg-mastered-bg text-mastered-text' : 'border-slate-300'
             } ${shaking ? 'motion-safe:animate-shake' : ''}`}
           />
-          <button type="submit" disabled={!playing || !typed.trim()} className={`${pill} w-full bg-primary text-white`}>
+          <button type="submit" disabled={!playing || letters(typed).length <= locked} className={`${pill} w-full bg-primary text-white`}>
             Check
           </button>
         </form>
