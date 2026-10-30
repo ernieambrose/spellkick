@@ -222,4 +222,87 @@ describe('Scramble', () => {
     expect(onSkip).toHaveBeenCalledOnce();
     expect(onResult).not.toHaveBeenCalled();
   });
+
+  describe('Hint reveals the letter the kid is stuck on', () => {
+    const clickTile = (letter: string) => fireEvent.click(tray().getAllByRole('button', { name: letter })[0]);
+    const hintButton = () => screen.getByRole('button', { name: 'Hint' });
+    const check = () => fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+
+    it('skips the kid\'s correct letters and reveals the third; result is hinted', () => {
+      const { onResult } = setup('necessary');
+      clickTile('N');
+      clickTile('E');
+      fireEvent.click(hintButton());
+      const slots = answer().getAllByRole('button');
+      expect(slots[0]).toHaveTextContent('N');
+      expect(slots[1]).toHaveTextContent('E');
+      expect(slots[2]).toHaveTextContent('C');
+      fireEvent.click(slots[1]); // own correct letters before the hint are locked too
+      expect(slots[1]).toHaveTextContent('E');
+      solve('NECESSARY');
+      check();
+      act(() => vi.advanceTimersByTime(600));
+      expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'hinted' });
+    });
+
+    it('replaces a wrong letter and returns the wrong tile to the tray', () => {
+      setup('necessary');
+      clickTile('N');
+      clickTile('S'); // wrong: slot 1 should be E
+      const before = trayLetters().length;
+      fireEvent.click(hintButton());
+      const slots = answer().getAllByRole('button');
+      expect(slots[0]).toHaveTextContent('N');
+      expect(slots[1]).toHaveTextContent('E');
+      expect(trayLetters()).toHaveLength(before); // E left the tray, S came back
+      expect(trayLetters()).toContain('S');
+    });
+
+    it('typing mode: with "NE" typed, reveals the third letter', () => {
+      setup('necessary');
+      fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
+      const input = screen.getByRole('textbox', { name: 'Type the word' });
+      fireEvent.change(input, { target: { value: 'ne' } });
+      fireEvent.click(hintButton());
+      expect(input).toHaveValue('NEC');
+      expect(screen.getByText('NEC')).toBeInTheDocument(); // "Starts with" line
+      fireEvent.change(input, { target: { value: 'x' } }); // can't erase the locked prefix
+      expect(input).toHaveValue('NEC');
+    });
+
+    it('is disabled after two uses', () => {
+      setup('necessary');
+      fireEvent.click(hintButton());
+      fireEvent.click(hintButton());
+      expect(hintButton()).toBeDisabled();
+    });
+
+    it('is disabled when every letter is already correct', () => {
+      setup('necessary');
+      solve('NECESSARY');
+      expect(hintButton()).toBeDisabled();
+    });
+
+    it('solving with only the kid\'s own letters and no Hint taps reports clean', () => {
+      const { onResult } = setup('necessary');
+      clickTile('N');
+      clickTile('E');
+      solve('NECESSARY');
+      check();
+      act(() => vi.advanceTimersByTime(600));
+      expect(onResult).toHaveBeenCalledExactlyOnceWith({ kind: 'clean' });
+    });
+
+    it('switching between typing and tiles keeps the locked prefix', () => {
+      setup('necessary');
+      clickTile('N');
+      fireEvent.click(hintButton()); // locks N, then reveals E in slot 1
+      fireEvent.click(screen.getByRole('button', { name: 'Type instead' }));
+      expect(screen.getByRole('textbox', { name: 'Type the word' })).toHaveValue('NE');
+      fireEvent.click(screen.getByRole('button', { name: 'Use tiles' }));
+      const slots = answer().getAllByRole('button');
+      expect(slots[0]).toHaveTextContent('N');
+      expect(slots[1]).toHaveTextContent('E');
+    });
+  });
 });
