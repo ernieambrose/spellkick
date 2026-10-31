@@ -11,7 +11,7 @@ import type { GameProps } from '../Session/games';
 const SUCCESS_MS = 600;
 const REVEAL_MS = 2000;
 const SHAKE_MS = 400;
-const MAX_HINTS = 2; // each hint locks one more letter; a scramble always has at least 3
+const MAX_HINTS = 2; // hint taps allowed; each reveals the letter the kid is stuck on
 
 // Uppercase with spaces, hyphens and apostrophes removed: the letters a scramble is made of.
 const letters = (s: string) => s.toUpperCase().replace(/[\s'’-]/g, '');
@@ -24,7 +24,7 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-// Put the right tile in slot `i` (the next hint slot), returning whatever was there to the tray.
+// Put the right tile in slot `i` (the hint slot), returning whatever was there to the tray.
 function lockSlot(slots: (number | null)[], tiles: string[], i: number, letter: string): (number | null)[] {
   const next = [...slots];
   const current = next[i];
@@ -54,7 +54,8 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const profileId = useContext(ProfileContext)?.activeId ?? null;
   const [typing, setTyping] = useState(() => readScrambleMode(profileId) === 'type');
   const input = useRef<HTMLInputElement>(null);
-  const [locked, setLocked] = useState(0);
+  const [locked, setLocked] = useState(0); // length of the locked prefix (hinted letters + the kid's own correct ones before them)
+  const [hintsUsed, setHintsUsed] = useState(0);
   const [wrong, setWrong] = useState(0);
   const [shaking, setShaking] = useState(false);
   const [status, setStatus] = useState<Status>('playing');
@@ -96,10 +97,44 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const later = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
   const playing = status === 'playing';
 
+  const prefix = target.slice(0, locked);
+
+  // First position the kid is stuck on: empty or wrong (tiles), or differing/missing (typing). null = all correct.
+  const stuckAt = (() => {
+    if (typing) {
+      const t = letters(typed);
+      for (let i = 0; i < target.length; i++) if (t[i] !== target[i]) return i;
+      return null;
+    }
+    for (let i = locked; i < target.length; i++) {
+      const t = slots[i];
+      if (t === null || tiles[t] !== target[i]) return i;
+    }
+    return null;
+  })();
+
   function hint() {
-    if (locked >= MAX_HINTS) return;
-    setSlots((s) => lockSlot(s, tiles!, locked, target[locked]));
-    setLocked(locked + 1);
+    if (stuckAt === null || hintsUsed >= MAX_HINTS) return;
+    // Slots before stuckAt already hold the kid's correct letters: locking them is free.
+    if (typing) setTyped(target.slice(0, stuckAt + 1));
+    else setSlots((s) => lockSlot(s, tiles!, stuckAt, target[stuckAt]));
+    setLocked(stuckAt + 1);
+    setHintsUsed(hintsUsed + 1);
+  }
+
+  // Keep the locked prefix consistent in whichever mode the kid switches to.
+  function toggleMode() {
+    if (typing) {
+      setSlots((s) => {
+        let next = s;
+        for (let i = 0; i < locked; i++) next = lockSlot(next, tiles!, i, target[i]);
+        return next;
+      });
+    } else if (!letters(typed).startsWith(prefix)) {
+      setTyped(prefix);
+    }
+    setTyping(!typing);
+    writeScrambleMode(profileId, typing ? 'tiles' : 'type');
   }
 
   function tapTile(tile: number) {
@@ -126,17 +161,17 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
     setOtherWord(false);
     if (guess === target) {
       setStatus('correct');
-      later(SUCCESS_MS, () => onResult({ kind: locked > 0 ? 'hinted' : 'clean' }));
+      later(SUCCESS_MS, () => onResult({ kind: hintsUsed > 0 ? 'hinted' : 'clean' }));
     } else if (isOtherWord(guess)) {
       setOtherWord(true); // a real word, just not this one: no try used
       setSlots((s) => s.map((t, k) => (k < locked ? t : null)));
-      setTyped('');
+      setTyped(prefix);
     } else if (wrong === 0) {
       setWrong(1);
       setShaking(true);
       later(SHAKE_MS, () => setShaking(false));
       setSlots((s) => s.map((t, k) => (k < locked ? t : null)));
-      setTyped('');
+      setTyped(prefix);
     } else {
       setStatus('reveal');
       later(REVEAL_MS, () => onResult({ kind: 'miss' }));
@@ -147,7 +182,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
   const full = !slots.includes(null);
   const submitTyped = (e: FormEvent) => {
     e.preventDefault();
-    if (playing && typed.trim()) check(typed);
+    if (playing && letters(typed).length > locked) check(typed);
   };
 
   const pill = 'min-h-12 rounded-full px-6 text-lg font-semibold transition active:scale-95 disabled:opacity-40';
@@ -160,7 +195,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
         <form onSubmit={submitTyped} className="flex w-full max-w-sm flex-col items-center gap-3">
           {locked > 0 && (
             <p className="text-slate-600">
-              Starts with <span className="font-bold text-primary">{target.slice(0, locked)}</span>
+              Starts with <span className="font-bold text-primary">{prefix}</span>
             </p>
           )}
           <p className="text-2xl font-bold tracking-widest text-review-text">{tiles.join(' ')}</p>
@@ -168,7 +203,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
             ref={input}
             aria-label="Type the word"
             value={typed}
-            onChange={(e) => setTyped(e.target.value)}
+            onChange={(e) => setTyped(letters(e.target.value).startsWith(prefix) ? e.target.value : prefix)}
             disabled={!playing}
             autoCapitalize="off"
             autoCorrect="off"
@@ -178,7 +213,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
               status === 'correct' ? 'border-mastered bg-mastered-bg text-mastered-text' : 'border-slate-300'
             } ${shaking ? 'motion-safe:animate-shake' : ''}`}
           />
-          <button type="submit" disabled={!playing || !typed.trim()} className={`${pill} w-full bg-primary text-white`}>
+          <button type="submit" disabled={!playing || letters(typed).length <= locked} className={`${pill} w-full bg-primary text-white`}>
             Check
           </button>
         </form>
@@ -223,7 +258,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
         )}
         <button
           type="button"
-          disabled={!playing || locked >= MAX_HINTS}
+          disabled={!playing || hintsUsed >= MAX_HINTS || stuckAt === null}
           onClick={hint}
           className={`${pill} bg-tricky-bg text-tricky-text`}
         >
@@ -232,10 +267,7 @@ export function Scramble({ word, onResult, onSkip, seed }: GameProps & { seed?: 
         <button
           type="button"
           disabled={!playing}
-          onClick={() => {
-            setTyping(!typing);
-            writeScrambleMode(profileId, typing ? 'tiles' : 'type');
-          }}
+          onClick={toggleMode}
           className={`${pill} border border-slate-300 text-slate-600`}
         >
           {typing ? 'Use tiles' : 'Type instead'}
