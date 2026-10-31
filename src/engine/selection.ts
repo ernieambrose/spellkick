@@ -28,14 +28,31 @@ export interface SelectInput {
 const CURRENT_SHARE = 0.7;
 const MASTERED_SHARE = 0.8;
 
-/** Earliest list with testDate >= today; else the newest undated list; else null. */
+/** True when the list has a test dated today or later. */
+export function hasUpcomingTest(list: WordList | null, today: string): boolean {
+  return list !== null && list.testDate !== null && list.testDate >= today;
+}
+
+/**
+ * Earliest list with testDate >= today; else the most recent list overall (latest testDate,
+ * undated lists by createdAt; a dated past list vs an undated one goes to the newer-created).
+ * Null only when there are no lists.
+ */
 export function currentList(lists: WordList[], today: string): WordList | null {
-  const byNewest = (x: WordList, y: WordList) => Date.parse(y.createdAt) - Date.parse(x.createdAt);
+  const created = (l: WordList) => Date.parse(l.createdAt);
+  const byNewest = (x: WordList, y: WordList) => created(y) - created(x);
   const upcoming = lists
-    .filter((l) => l.testDate !== null && l.testDate >= today)
+    .filter((l) => hasUpcomingTest(l, today))
     .sort((x, y) => x.testDate!.localeCompare(y.testDate!) || byNewest(x, y));
   if (upcoming.length > 0) return upcoming[0];
-  return lists.filter((l) => l.testDate === null).sort(byNewest)[0] ?? null;
+  const recent = (x: WordList, y: WordList) =>
+    x.testDate !== null && y.testDate !== null
+      ? y.testDate.localeCompare(x.testDate) || byNewest(x, y)
+      : byNewest(x, y);
+  // Not a total order across dated/undated mixes, so pick by a linear scan.
+  let best: WordList | null = null;
+  for (const l of lists) if (best === null || recent(l, best) < 0) best = l;
+  return best;
 }
 
 interface Candidate {
@@ -72,14 +89,16 @@ export function selectSessionWords(input: SelectInput): SessionWord[] {
   if (input.mode !== 'extra') {
     // 1. Current list, by tier.
     const cur = currentList(lists, today);
-    const currentSlots = Math.round(size * CURRENT_SHARE);
+    const testUpcoming = hasUpcomingTest(cur, today);
+    // With a test coming up, the kid's list comes first and fills every slot (mastered included).
+    const currentSlots = testUpcoming ? size : Math.round(size * CURRENT_SHARE);
     if (cur) {
       const words = shuffle(fromList(cur), rng);
       const unique = new Set(words.map((c) => normalizeWord(c.word))).size;
       const masteredCount = new Set(
         words.filter((c) => c.state === 'mastered').map((c) => normalizeWord(c.word)),
       ).size;
-      const mostlyMastered = unique > 0 && masteredCount / unique >= MASTERED_SHARE;
+      const mostlyMastered = !testUpcoming && unique > 0 && masteredCount / unique >= MASTERED_SHARE;
       const tiers: WordState[] = mostlyMastered
         ? ['tricky', 'new', 'learning']
         : ['tricky', 'new', 'learning', 'mastered'];
@@ -88,7 +107,7 @@ export function selectSessionWords(input: SelectInput): SessionWord[] {
     }
 
     // Review never takes more than its own share; unfilled current slots go to generated words.
-    const reviewLimit = picked.length + (size - currentSlots);
+    const reviewLimit = testUpcoming ? size : picked.length + (size - currentSlots);
 
     // 2. Review: tricky first, then oldest last attempt; shuffle gives the random tiebreak.
     const others = shuffle(

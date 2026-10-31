@@ -1,6 +1,6 @@
 import gradeWords from '../../src/data/gradeWords.json';
 import { seededRng } from '../../src/engine/rng';
-import { currentList, selectSessionWords, type SessionWord } from '../../src/engine/selection';
+import { currentList, hasUpcomingTest, selectSessionWords, type SessionWord } from '../../src/engine/selection';
 import type { AttemptKind, AttemptLike, WordList } from '../../src/engine/types';
 import { normalizeWord } from '../../src/engine/words';
 
@@ -36,6 +36,11 @@ const nextWeek = list('next', ['zebra', 'tiger'], '2026-11-13');
 const past = list('past', ['river', 'ocean', 'lake', 'stream', 'pond'], '2026-10-23');
 const undated = list('undated', ['cloud', 'storm'], null, '2026-10-25T00:00:00Z');
 
+// Same words as `fri`/`next`, but no upcoming test: exercises the 70/30 mix.
+const friNT = list('fri', friWords, null, '2026-10-30T00:00:00Z');
+const nextNT = list('next', ['zebra', 'tiger'], '2026-10-13');
+const noTest = [friNT, nextNT, past];
+
 type Input = Parameters<typeof selectSessionWords>[0];
 const select = (over: Partial<Input> = {}) =>
   selectSessionWords({
@@ -56,7 +61,27 @@ describe('currentList', () => {
     const older = list('older', ['a'], null, '2026-09-01T00:00:00Z');
     expect(currentList([older, past, undated], TODAY)!.id).toBe('undated');
   });
-  it('returns null when only past lists exist', () => expect(currentList([past], TODAY)).toBeNull());
+  it('keeps the only past list current (was: null)', () => expect(currentList([past], TODAY)!.id).toBe('past'));
+  it('returns null only when there are no lists', () => expect(currentList([], TODAY)).toBeNull());
+  it('picks the later-dated of two past lists', () => {
+    const earlier = list('earlier', ['a'], '2026-10-01', '2026-09-30T00:00:00Z');
+    expect(currentList([earlier, past], TODAY)!.id).toBe('past');
+    expect(currentList([past, earlier], TODAY)!.id).toBe('past');
+  });
+  it('prefers a more recently created undated list over a past dated one', () => {
+    expect(currentList([past, undated], TODAY)!.id).toBe('undated');
+  });
+  it('prefers a past dated list created after an undated one', () => {
+    const newPast = list('newPast', ['a'], '2026-10-30', '2026-10-31T00:00:00Z');
+    expect(currentList([undated, newPast], TODAY)!.id).toBe('newPast');
+  });
+  it('hasUpcomingTest is true only for testDate >= today', () => {
+    expect(hasUpcomingTest(fri, TODAY)).toBe(true);
+    expect(hasUpcomingTest(list('t', ['a'], TODAY), TODAY)).toBe(true);
+    expect(hasUpcomingTest(past, TODAY)).toBe(false);
+    expect(hasUpcomingTest(undated, TODAY)).toBe(false);
+    expect(hasUpcomingTest(null, TODAY)).toBe(false);
+  });
 });
 
 describe('selectSessionWords', () => {
@@ -65,12 +90,50 @@ describe('selectSessionWords', () => {
     expect(select({ size: 6 })).toHaveLength(6);
   });
 
-  it('fills 7 current + 3 review when available', () => {
+  it('fills all 10 from the current list when its test is upcoming', () => {
     const s = select();
+    expect(count(s, 'current')).toBe(10);
+    for (const w of s.filter((x) => x.role === 'current')) expect(w.listId).toBe('fri');
+  });
+
+  it('fills 7 current + 3 review when there is no upcoming test', () => {
+    const cur = list('cur', friWords, null, '2026-10-30T00:00:00Z');
+    const s = select({ lists: [cur, past] });
     expect(count(s, 'current')).toBe(7);
     expect(count(s, 'review')).toBe(3);
-    for (const w of s.filter((x) => x.role === 'current')) expect(w.listId).toBe('fri');
-    for (const w of s.filter((x) => x.role === 'review')) expect(['next', 'past']).toContain(w.listId);
+    for (const w of s.filter((x) => x.role === 'review')) expect(w.listId).toBe('past');
+  });
+
+  it('uses only list words for a 23-word list with an upcoming test and no other lists', () => {
+    const words = Array.from({ length: 23 }, (_, i) => `listword${i}`);
+    const s = select({ lists: [list('big', words, '2026-11-06')] });
+    expect(count(s, 'current')).toBe(10);
+    expect(count(s, 'generated')).toBe(0);
+  });
+
+  it('takes 6 current, then review, then generated for a short upcoming list', () => {
+    const six = list('six', ['aa1', 'bb2', 'cc3', 'dd4', 'ee5', 'ff6'], '2026-11-06');
+    const older = list('old', ['alpha', 'bravo'], '2026-10-01');
+    const s = select({ lists: [six, older] });
+    expect(count(s, 'current')).toBe(6);
+    expect(count(s, 'review')).toBe(2);
+    expect(count(s, 'generated')).toBe(2);
+  });
+
+  it('still uses 10 list words when all are mastered and the test is upcoming', () => {
+    const attempts = friWords.flatMap((w) => mastered(w));
+    const s = select({ lists: [fri], attempts });
+    expect(count(s, 'current')).toBe(10);
+    expect(count(s, 'generated')).toBe(0);
+  });
+
+  it('uses the no-test mix for a list dated yesterday with no other lists', () => {
+    const words = Array.from({ length: 23 }, (_, i) => `listword${i}`);
+    const yesterday = list('y', words, '2026-11-01');
+    expect(currentList([yesterday], TODAY)!.id).toBe('y');
+    const s = select({ lists: [yesterday] });
+    expect(count(s, 'current')).toBe(7);
+    expect(count(s, 'generated')).toBe(3);
   });
 
   it('puts tricky current words first', () => {
@@ -92,7 +155,7 @@ describe('selectSessionWords', () => {
       ...['kumquat', 'papaya', 'guava'].flatMap((w) => mastered(w)),
       ...['lychee', 'durian'].map((w) => att(w, 'clean', '2026-10-28')),
     ];
-    const current = select({ attempts }).filter((w) => w.role === 'current');
+    const current = select({ lists: noTest, attempts }).filter((w) => w.role === 'current');
     expect(current.map((w) => w.word).sort()).toEqual(
       ['lychee', 'durian', 'quince', 'persimmon', 'tamarind', 'rambutan', 'jackfruit'].sort(),
     );
@@ -119,14 +182,14 @@ describe('selectSessionWords', () => {
       att('charlie', 'clean', '2026-10-29'),
       att('delta', 'clean', '2026-10-12'),
     ];
-    const s = select({ lists: [fri, review], attempts });
+    const s = select({ lists: [friNT, review], attempts });
     expect(s.filter((w) => w.role === 'review').map((w) => w.word).sort()).toEqual(['bravo', 'delta', 'echo']);
   });
 
   it('treats never-attempted review words as oldest', () => {
     const review = list('old', ['alpha', 'bravo', 'charlie', 'delta'], '2026-10-16');
     const attempts = ['alpha', 'bravo', 'charlie'].map((w, i) => att(w, 'clean', `2026-10-1${i}`));
-    const s = select({ lists: [fri, review], attempts });
+    const s = select({ lists: [friNT, review], attempts });
     expect(s.filter((w) => w.role === 'review').map((w) => w.word).sort()).toEqual(['alpha', 'bravo', 'delta']);
   });
 
@@ -144,14 +207,16 @@ describe('selectSessionWords', () => {
     expect(count(s, 'generated')).toBe(8);
   });
 
-  it('caps review at 3 when there is no current list', () => {
-    const s = select({ lists: [past] });
+  it('caps review at 3 when the current list has no upcoming test', () => {
+    const older = list('older', ['alpha', 'bravo', 'charlie', 'delta', 'echo'], '2026-10-01');
+    const s = select({ lists: [past, older] });
+    expect(count(s, 'current')).toBe(5);
     expect(count(s, 'review')).toBe(3);
-    expect(count(s, 'generated')).toBe(7);
+    expect(count(s, 'generated')).toBe(2);
   });
 
   it('caps review at 3 when the current list is short', () => {
-    const s = select({ lists: [list('fri', ['kumquat', 'papaya'], '2026-11-06'), past] });
+    const s = select({ lists: [list('fri', ['kumquat', 'papaya'], null, '2026-10-30T00:00:00Z'), past] });
     expect(count(s, 'current')).toBe(2);
     expect(count(s, 'review')).toBe(3);
     expect(count(s, 'generated')).toBe(5);
@@ -159,7 +224,7 @@ describe('selectSessionWords', () => {
 
   it('sends leftover current slots to generated when ≥80% of the list is mastered', () => {
     const attempts = friWords.slice(0, 8).flatMap((w) => mastered(w));
-    const s = select({ attempts });
+    const s = select({ lists: noTest, attempts });
     expect(count(s, 'current')).toBe(2); // only the 2 unmastered words
     expect(count(s, 'review')).toBe(3);
     expect(count(s, 'generated')).toBe(5);
@@ -167,7 +232,7 @@ describe('selectSessionWords', () => {
 
   it('falls back to mastered current words when generated words run out under the 80% rule', () => {
     const attempts = friWords.slice(0, 8).flatMap((w) => mastered(w));
-    const s = select({ attempts, usable: (w) => friWords.includes(w) || ['zebra', 'tiger', 'river'].includes(w) });
+    const s = select({ lists: noTest, attempts, usable: (w) => friWords.includes(w) || ['zebra', 'tiger', 'river'].includes(w) });
     expect(s).toHaveLength(10);
     expect(count(s, 'current')).toBe(7);
     expect(count(s, 'review')).toBe(3);
@@ -210,7 +275,7 @@ describe('selectSessionWords', () => {
 
   it('is deterministic for a given rng seed and shuffles the final order', () => {
     expect(select({ rng: seededRng(3) })).toEqual(select({ rng: seededRng(3) }));
-    const orders = new Set([1, 2, 3, 4, 5].map((seed) => select({ rng: seededRng(seed) }).map((w) => w.role).join()));
+    const orders = new Set([1, 2, 3, 4, 5].map((seed) => select({ lists: noTest, rng: seededRng(seed) }).map((w) => w.role).join()));
     expect(orders.size).toBeGreaterThan(1);
   });
 });
