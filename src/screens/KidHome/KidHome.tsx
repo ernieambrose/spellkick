@@ -5,7 +5,7 @@ import { useRepo } from '../../app/repoContext';
 import { ProgressBar } from '../../components/ProgressBar';
 import { WordPill } from '../../components/WordPill';
 import { summarize } from '../../engine/mastery';
-import { currentList } from '../../engine/selection';
+import { currentList, hasUpcomingTest } from '../../engine/selection';
 import { computeStreak, localDate } from '../../engine/streak';
 import type { Attempt, Session, WordList, WordState } from '../../engine/types';
 import { normalizeWord } from '../../engine/words';
@@ -72,7 +72,7 @@ export function KidHome() {
         <section className="rounded-3xl bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-xl font-bold text-slate-800">{cur.name}</h2>
-            {cur.testDate && (
+            {hasUpcomingTest(cur, today) && cur.testDate && (
               <span className="font-semibold text-primary">{countdownText(cur.testDate, today)}</span>
             )}
           </div>
