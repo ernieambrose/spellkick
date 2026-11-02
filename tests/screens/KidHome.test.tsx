@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../../src/App';
 import { createMemoryRepo } from '../../src/data/memoryRepo';
 import type { Repo } from '../../src/data/repo';
 import { localDate } from '../../src/engine/streak';
-import type { Profile, WordList } from '../../src/engine/types';
+import type { Attempt, Profile, WordList } from '../../src/engine/types';
 import { stubAuth } from '../helpers/auth';
 
 // This file tests the home-to-done flow, not a real game: answer each word with one tap.
@@ -42,17 +42,53 @@ const list = (over: Partial<WordList> = {}): WordList => ({
   ...over,
 });
 
+const miss = (word: string, listId: string | null = null): Attempt => ({
+  id: crypto.randomUUID(),
+  profileId: felix.id,
+  sessionId: 's-1',
+  word,
+  listId,
+  game: 'scramble',
+  kind: 'miss',
+  ms: null,
+  localDate: daysFromToday(-1),
+  createdAt: '2026-10-30T12:00:00.000Z',
+});
+
 async function renderKid(...lists: WordList[]): Promise<Repo> {
+  return renderKidWith(lists, []);
+}
+
+async function renderKidWith(lists: WordList[], attempts: Attempt[]): Promise<Repo> {
   const repo = createMemoryRepo();
   await repo.saveProfile(felix);
   for (const l of lists) await repo.saveList(l);
+  await repo.addAttempts(attempts);
   localStorage.setItem('spellkick.activeProfile', felix.id);
   window.history.pushState({}, '', `/kid/${felix.id}`);
   render(<App repo={repo} authClient={stubAuth({ signedIn: true })} />);
   return repo;
 }
 
+function mockSpeech() {
+  const speak = vi.fn();
+  vi.stubGlobal('speechSynthesis', { speak, cancel: vi.fn() });
+  vi.stubGlobal(
+    'SpeechSynthesisUtterance',
+    class {
+      text: string;
+      lang = '';
+      rate = 1;
+      constructor(text: string) {
+        this.text = text;
+      }
+    },
+  );
+  return speak;
+}
+
 beforeEach(() => localStorage.clear());
+afterEach(() => vi.unstubAllGlobals());
 
 describe('KidHome', () => {
   it('shows the countdown for a list dated 3 days out', async () => {
@@ -102,5 +138,56 @@ describe('KidHome', () => {
     expect(screen.getByRole('link', { name: 'See my awards' })).toBeInTheDocument();
     expect(await screen.findByText(/First Kick/)).toBeInTheDocument();
     expect(await repo.listAttempts(felix.id)).toHaveLength(10);
+  });
+
+  it('counts a missed generated word as tricky, not just list words', async () => {
+    await renderKidWith([list()], [miss('because', 'x'), miss('ocean')]);
+    expect(await screen.findByRole('button', { name: '2 tricky' })).toBeInTheDocument();
+  });
+
+  it('opens the tricky words when the count is tapped, and closes on Escape', async () => {
+    const user = userEvent.setup();
+    await renderKidWith([list()], [miss('because', 'x'), miss('ocean')]);
+    const pill = await screen.findByRole('button', { name: '2 tricky' });
+    await user.click(pill);
+    const dialog = screen.getByRole('dialog', { name: 'Tricky words' });
+    expect(within(dialog).getByText('because')).toBeInTheDocument();
+    expect(within(dialog).getByText('ocean')).toBeInTheDocument();
+    expect(within(dialog).queryByText('friend')).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(pill).toHaveFocus();
+  });
+
+  it('lists older words to review and closes with the Close button', async () => {
+    const user = userEvent.setup();
+    await renderKid(
+      list({ name: 'Week 8', words: ['island'], createdAt: '2026-10-10T12:00:00.000Z' }),
+      list({ testDate: daysFromToday(3) }),
+    );
+    await user.click(await screen.findByRole('button', { name: '1 to review' }));
+    const dialog = screen.getByRole('dialog', { name: 'Words to review' });
+    expect(within(dialog).getByText('island')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not make an empty count tappable', async () => {
+    await renderKid(list());
+    expect(await screen.findByText('0 mastered')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '0 mastered' })).not.toBeInTheDocument();
+  });
+
+  it('labels built-in words as bonus words and reads a word aloud', async () => {
+    const user = userEvent.setup();
+    const speak = mockSpeech();
+    await renderKidWith([list()], [miss('because', 'x'), miss('ocean')]);
+    await user.click(await screen.findByRole('button', { name: '2 tricky' }));
+    const dialog = screen.getByRole('dialog', { name: 'Tricky words' });
+    const [because, ocean] = within(dialog).getAllByRole('listitem');
+    expect(within(because).queryByText('bonus word')).not.toBeInTheDocument();
+    expect(within(ocean).getByText('bonus word')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Hear ocean' }));
+    expect(speak.mock.calls[0][0]).toMatchObject({ text: 'ocean' });
   });
 });

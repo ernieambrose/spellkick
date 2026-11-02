@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useActiveProfile } from '../../app/profileContext';
 import { useRepo } from '../../app/repoContext';
 import { ProgressBar } from '../../components/ProgressBar';
-import { WordPill } from '../../components/WordPill';
+import { type PillTone, WordPill } from '../../components/WordPill';
 import { summarize } from '../../engine/mastery';
 import { currentList, hasUpcomingTest } from '../../engine/selection';
 import { computeStreak, localDate } from '../../engine/streak';
 import type { Attempt, Session, WordList, WordState } from '../../engine/types';
 import { normalizeWord } from '../../engine/words';
 import { countdownText } from './countdown';
+import { type ShownWord, WordsDialog } from './WordsDialog';
 
 interface HomeData {
   lists: WordList[];
@@ -18,6 +19,7 @@ interface HomeData {
 }
 
 const unique = (words: string[]) => [...new Set(words.map(normalizeWord))];
+const sorted = (words: string[]) => [...words].sort((a, b) => a.localeCompare(b));
 
 const gameButton =
   'flex min-h-16 items-center gap-4 rounded-3xl px-6 text-xl font-bold shadow-sm transition hover:shadow-md active:scale-[0.98]';
@@ -28,6 +30,8 @@ export function KidHome() {
   const navigate = useNavigate();
   const [data, setData] = useState<HomeData | null>(null);
   const [today] = useState(() => localDate(new Date()));
+  const [showing, setShowing] = useState<PillTone | null>(null);
+  const closeWords = useCallback(() => setShowing(null), []);
 
   useEffect(() => {
     if (!activeId) return;
@@ -47,10 +51,20 @@ export function KidHome() {
   const cur = currentList(lists, today);
   const curWords = unique(cur?.words ?? []);
   const curMastered = curWords.filter((w) => stateOf(w) === 'mastered').length;
-  const allWords = unique(lists.flatMap((l) => l.words));
-  const reviewWords = unique(lists.filter((l) => l !== cur).flatMap((l) => l.words)).filter(
-    (w) => !curWords.includes(w) && stateOf(w) !== 'mastered',
-  );
+  // Every word the kid has met: all list words plus any practiced word (generated ones too).
+  const allWords = unique([...lists.flatMap((l) => l.words), ...states.keys()]);
+  const groups: Record<PillTone, string[]> = {
+    mastered: sorted(allWords.filter((w) => stateOf(w) === 'mastered')),
+    tricky: sorted(allWords.filter((w) => stateOf(w) === 'tricky')),
+    review: sorted(
+      unique(lists.filter((l) => l !== cur).flatMap((l) => l.words)).filter(
+        (w) => !curWords.includes(w) && stateOf(w) !== 'mastered',
+      ),
+    ),
+  };
+  const listWords = new Set(lists.flatMap((l) => l.words).map(normalizeWord));
+  const shown = (words: string[]): ShownWord[] => words.map((word) => ({ word, bonus: !listWords.has(word) }));
+  const countLabel: Record<PillTone, string> = { mastered: 'mastered', tricky: 'tricky', review: 'to review' };
   const streak = computeStreak(
     (data?.sessions ?? []).filter((s) => s.completedAt !== null).map((s) => s.localDate),
     today,
@@ -91,9 +105,11 @@ export function KidHome() {
 
       {allWords.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          <WordPill tone="mastered">{allWords.filter((w) => stateOf(w) === 'mastered').length} mastered</WordPill>
-          <WordPill tone="tricky">{allWords.filter((w) => stateOf(w) === 'tricky').length} tricky</WordPill>
-          <WordPill tone="review">{reviewWords.length} to review</WordPill>
+          {(['mastered', 'tricky', 'review'] as const).map((tone) => (
+            <WordPill key={tone} tone={tone} onClick={groups[tone].length > 0 ? () => setShowing(tone) : undefined}>
+              {groups[tone].length} {countLabel[tone]}
+            </WordPill>
+          ))}
         </div>
       )}
 
@@ -127,6 +143,8 @@ export function KidHome() {
           Switch kid
         </button>
       </div>
+
+      {showing && <WordsDialog tone={showing} words={shown(groups[showing])} onClose={closeWords} />}
     </main>
   );
 }
