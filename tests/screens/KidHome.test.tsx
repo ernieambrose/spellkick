@@ -70,7 +70,25 @@ async function renderKidWith(lists: WordList[], attempts: Attempt[]): Promise<Re
   return repo;
 }
 
+function mockSpeech() {
+  const speak = vi.fn();
+  vi.stubGlobal('speechSynthesis', { speak, cancel: vi.fn() });
+  vi.stubGlobal(
+    'SpeechSynthesisUtterance',
+    class {
+      text: string;
+      lang = '';
+      rate = 1;
+      constructor(text: string) {
+        this.text = text;
+      }
+    },
+  );
+  return speak;
+}
+
 beforeEach(() => localStorage.clear());
+afterEach(() => vi.unstubAllGlobals());
 
 describe('KidHome', () => {
   it('shows the countdown for a list dated 3 days out', async () => {
@@ -158,5 +176,18 @@ describe('KidHome', () => {
     await renderKid(list());
     expect(await screen.findByText('0 mastered')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '0 mastered' })).not.toBeInTheDocument();
+  });
+
+  it('labels built-in words as bonus words and reads a word aloud', async () => {
+    const user = userEvent.setup();
+    const speak = mockSpeech();
+    await renderKidWith([list()], [miss('because', 'x'), miss('ocean')]);
+    await user.click(await screen.findByRole('button', { name: '2 tricky' }));
+    const dialog = screen.getByRole('dialog', { name: 'Tricky words' });
+    const [because, ocean] = within(dialog).getAllByRole('listitem');
+    expect(within(because).queryByText('bonus word')).not.toBeInTheDocument();
+    expect(within(ocean).getByText('bonus word')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Hear ocean' }));
+    expect(speak.mock.calls[0][0]).toMatchObject({ text: 'ocean' });
   });
 });

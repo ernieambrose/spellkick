@@ -10,7 +10,7 @@ import { computeStreak, localDate } from '../../engine/streak';
 import type { Attempt, Session, WordList, WordState } from '../../engine/types';
 import { normalizeWord } from '../../engine/words';
 import { countdownText } from './countdown';
-import { WordsDialog } from './WordsDialog';
+import { type ShownWord, WordsDialog } from './WordsDialog';
 
 interface HomeData {
   lists: WordList[];
@@ -62,6 +62,8 @@ export function KidHome() {
       ),
     ),
   };
+  const listWords = new Set(lists.flatMap((l) => l.words).map(normalizeWord));
+  const shown = (words: string[]): ShownWord[] => words.map((word) => ({ word, bonus: !listWords.has(word) }));
   const countLabel: Record<PillTone, string> = { mastered: 'mastered', tricky: 'tricky', review: 'to review' };
   const streak = computeStreak(
     (data?.sessions ?? []).filter((s) => s.completedAt !== null).map((s) => s.localDate),
@@ -142,7 +144,7 @@ export function KidHome() {
         </button>
       </div>
 
-      {showing && <WordsDialog tone={showing} words={groups[showing]} onClose={closeWords} />}
+      {showing && <WordsDialog tone={showing} words={shown(groups[showing])} onClose={closeWords} />}
     </main>
   );
 }

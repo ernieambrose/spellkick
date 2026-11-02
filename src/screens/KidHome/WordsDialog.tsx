@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { speak, speechSupported } from '../../app/speech';
 import { type PillTone, WordPill } from '../../components/WordPill';
 
 const TITLES: Record<PillTone, string> = {
@@ -13,9 +14,15 @@ const BLURBS: Record<PillTone, string> = {
   review: 'Older words that get mixed into your practice.',
 };
 
+export interface ShownWord {
+  word: string;
+  bonus: boolean; // a built-in word, not from one of the kid's lists
+}
+
 // The words behind one of the home counts. Look only: the app still picks what to practice.
-export function WordsDialog({ tone, words, onClose }: { tone: PillTone; words: string[]; onClose: () => void }) {
+export function WordsDialog({ tone, words, onClose }: { tone: PillTone; words: ShownWord[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const canSpeak = speechSupported();
 
   // Focus the Close button when it opens, close on Escape, and give focus back to the count after.
   useEffect(() => {
@@ -50,10 +57,21 @@ export function WordsDialog({ tone, words, onClose }: { tone: PillTone; words: s
           </button>
         </div>
         <p className="mt-1 text-slate-600">{BLURBS[tone]}</p>
-        <ul className="mt-4 flex flex-wrap gap-2 overflow-y-auto">
-          {words.map((w) => (
-            <li key={w}>
-              <WordPill tone={tone}>{w}</WordPill>
+        <ul className="mt-4 flex flex-col gap-2 overflow-y-auto">
+          {words.map(({ word, bonus }) => (
+            <li key={word} className="flex items-center gap-2">
+              <WordPill tone={tone}>{word}</WordPill>
+              {bonus && <span className="text-sm text-slate-500">bonus word</span>}
+              {canSpeak && (
+                <button
+                  type="button"
+                  onClick={() => speak(word)}
+                  aria-label={`Hear ${word}`}
+                  className="ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-full text-xl hover:bg-slate-100"
+                >
+                  <span aria-hidden="true">🔊</span>
+                </button>
+              )}
             </li>
           ))}
         </ul>
