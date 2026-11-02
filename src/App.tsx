@@ -14,6 +14,7 @@ import { ParentGate } from './screens/Parent/ParentGate';
 import { ParentHome } from './screens/Parent/ParentHome';
 import { ProfileEditor } from './screens/Parent/ProfileEditor';
 import { ProgressView } from './screens/Parent/ProgressView';
+import { Privacy } from './screens/Privacy/Privacy';
 import { Profiles } from './screens/Profiles/Profiles';
 import { SessionShell } from './screens/Session/SessionShell';
 import { SignIn } from './screens/SignIn/SignIn';
@@ -43,6 +44,7 @@ export default function App({ repo, authClient }: AppProps) {
           <BrowserRouter>
             <Routes>
               <Route path="/signin" element={<SignIn />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route element={<RequireAuth />}>
                 <Route index element={<Home />} />
                 <Route path="/profiles" element={<Profiles />} />

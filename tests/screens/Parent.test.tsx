@@ -392,6 +392,22 @@ describe('Forgot / change parent PIN', () => {
     expect(await screen.findByText('Set a parent PIN')).toBeInTheDocument();
   });
 
+  it('links to the privacy note from the parent home', async () => {
+    const repo = await repoWith([profile()]);
+    const user = renderAt('/parent', repo);
+    await typePin(user, PARENT_PIN);
+    expect(await screen.findByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy');
+  });
+
+  it('suggests a first name or nickname in the profile editor', async () => {
+    const repo = await repoWith();
+    const user = renderAt('/parent/profile/new', repo);
+    await typePin(user, PARENT_PIN);
+    expect(await screen.findByLabelText('Name')).toHaveAccessibleDescription(
+      'A first name or nickname is all SpellKick needs.',
+    );
+  });
+
   it('Change parent PIN from the parent home sets a new PIN', async () => {
     const repo = await repoWith([profile()]);
     const user = renderAt('/parent', repo);

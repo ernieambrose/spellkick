@@ -116,7 +116,16 @@ export function ProfileEditor() {
             <label htmlFor="kid-name" className={labelClass}>
               Name
             </label>
-            <input id="kid-name" className={fieldClass} value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              id="kid-name"
+              className={fieldClass}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-describedby="kid-name-hint"
+            />
+            <p id="kid-name-hint" className="mt-1 text-sm text-slate-500">
+              A first name or nickname is all SpellKick needs.
+            </p>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
