@@ -71,7 +71,10 @@ export function Privacy() {
       </Section>
 
       <Section title="Deleting your data">
-        <p>Email {mail} and we'll delete your family's account and everything in it.</p>
+        <p>
+          In the parent area, tap <strong>Delete my family's data</strong> to delete your account and everything in
+          it right away. Or email {mail} and we'll do it for you.
+        </p>
       </Section>
 
       <Section title="Questions">
