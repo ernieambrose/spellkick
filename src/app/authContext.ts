@@ -7,7 +7,7 @@ export interface AuthContextValue {
   status: AuthStatus;
   sendCode(email: string): Promise<{ error: AuthError | null }>;
   verifyCode(email: string, token: string): Promise<{ error: AuthError | null }>;
-  signOut(): Promise<void>;
+  signOut(opts?: { local?: boolean }): Promise<void>;
   getUser(): Promise<{ id: string | null; email: string | null } | null>; // the signed-in owner; null in demo mode
 }
 

@@ -69,5 +69,9 @@ export function createMemoryRepo(): Repo {
     async setParentPinHash(h) {
       parentPinHash = h;
     },
+    async deleteFamily() {
+      for (const m of [profiles, lists, attempts, sessions, awards]) m.clear();
+      parentPinHash = null;
+    },
   };
 }
