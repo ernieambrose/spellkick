@@ -141,6 +141,9 @@ export function ParentHome() {
           <button type="button" onClick={changePin} className={secondaryButton}>
             Change parent PIN
           </button>
+          <Link to="/privacy" className={secondaryButton}>
+            Privacy
+          </Link>
         </div>
       )}
     </main>

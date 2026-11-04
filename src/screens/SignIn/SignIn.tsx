@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import type { AuthError } from '../../app/authClient';
 import { useAuth } from '../../app/authContext';
 
@@ -103,6 +103,9 @@ export function SignIn() {
           </p>
         )}
       </div>
+      <Link to="/privacy" className="mt-6 text-center text-slate-500 underline hover:text-primary">
+        Privacy
+      </Link>
     </main>
   );
 }
