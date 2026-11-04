@@ -15,7 +15,7 @@ export interface AuthClient {
   verifyOtp(args: { email: string; token: string; type: 'email' }): Promise<{ error: AuthError | null }>;
   getSession(): Promise<{ signedIn: boolean; userId?: string | null; email?: string | null }>;
   onAuthStateChange(cb: (signedIn: boolean) => void): () => void; // returns unsubscribe
-  signOut(): Promise<{ error: AuthError | null }>;
+  signOut(opts?: { local?: boolean }): Promise<{ error: AuthError | null }>;
 }
 
 type StoredUser = { id: string; email?: string | null };
@@ -62,9 +62,10 @@ export function createSupabaseAuthClient(db: SupabaseClient): AuthClient {
       return () => data.subscription.unsubscribe();
     },
     // Global sign-out revokes the refresh token on the server. Offline it can't, so clear this
-    // device's session instead ('local'), which still signs out here.
-    async signOut() {
-      if (offline()) return db.auth.signOut({ scope: 'local' });
+    // device's session instead ('local'), which still signs out here. `local` also suits a
+    // deleted account, whose sessions the server already dropped.
+    async signOut(opts) {
+      if (opts?.local || offline()) return db.auth.signOut({ scope: 'local' });
       const res = await db.auth.signOut();
       return isAuthRetryableFetchError(res.error) ? db.auth.signOut({ scope: 'local' }) : res;
     },

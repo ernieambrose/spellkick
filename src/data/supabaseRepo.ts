@@ -115,5 +115,9 @@ export function createSupabaseRepo(db: SupabaseClient): Repo {
       const owner = await ownerId();
       check(await db.from('parent_settings').upsert({ owner, pin_hash: h }, { onConflict: 'owner' }));
     },
+    async deleteFamily() {
+      // Deletes the auth user; every table cascades from it (see 0003_delete_my_family.sql).
+      check(await db.rpc('delete_my_family'));
+    },
   };
 }

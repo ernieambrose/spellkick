@@ -70,7 +70,7 @@ async function typePin(user: ReturnType<typeof userEvent.setup>, pin: string) {
 
 const mapStore = (): KeyValueStore => {
   const m = new Map<string, unknown>();
-  return { get: async (k) => m.get(k), set: async (k, v) => void m.set(k, v), del: async (k) => void m.delete(k) };
+  return { get: async (k) => m.get(k), set: async (k, v) => void m.set(k, v), del: async (k) => void m.delete(k), clear: async () => m.clear() };
 };
 
 beforeEach(() => localStorage.clear());
@@ -419,5 +419,48 @@ describe('Forgot / change parent PIN', () => {
     await typePin(user, '8642');
     expect(await screen.findByRole('heading', { name: 'Parent' })).toBeInTheDocument();
     expect(await repo.getParentPinHash()).toBe(await hashPin('8642', 'parent'));
+  });
+});
+
+describe("Delete my family's data", () => {
+  it('needs the word typed, then deletes everything, clears this device, and signs out', async () => {
+    const kid = profile();
+    const repo = await repoWith([kid]);
+    await repo.saveList(list(kid.id));
+    const auth = stubAuth({ signedIn: true });
+    localStorage.setItem(`spellkick.scrambleMode.${kid.id}`, 'type');
+    const user = renderAt('/parent', repo, auth);
+    await typePin(user, PARENT_PIN);
+    await user.click(await screen.findByRole('link', { name: "Delete my family's data" }));
+
+    const button = await screen.findByRole('button', { name: 'Delete everything' });
+    expect(button).toBeDisabled();
+    await user.type(screen.getByLabelText(/to confirm/), 'Delete');
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    expect(await screen.findByText("Your family's data has been deleted.")).toBeInTheDocument();
+    expect(auth.signOut).toHaveBeenCalledWith({ local: true });
+    expect(await repo.listProfiles()).toEqual([]);
+    expect(await repo.listLists(kid.id)).toEqual([]);
+    expect(await repo.getParentPinHash()).toBeNull();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('spellkick.'))).toEqual([]);
+  });
+
+  it('keeps everything and says so when the delete fails', async () => {
+    const kid = profile();
+    const repo = await repoWith([kid]);
+    repo.deleteFamily = async () => {
+      throw new Error('network');
+    };
+    const auth = stubAuth({ signedIn: true });
+    const user = renderAt('/parent/delete', repo, auth);
+    await typePin(user, PARENT_PIN);
+    await user.type(await screen.findByLabelText(/to confirm/), 'delete');
+    await user.click(screen.getByRole('button', { name: 'Delete everything' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't delete. Nothing was removed.");
+    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(await repo.listProfiles()).toHaveLength(1);
   });
 });

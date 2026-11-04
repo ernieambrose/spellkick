@@ -46,9 +46,9 @@ export function AuthProvider({ client: clientProp, children }: Props) {
         }
         return res;
       },
-      async signOut() {
+      async signOut(opts) {
         if (!client) return;
-        await client.signOut();
+        await client.signOut(opts);
         setStatus('signedOut');
       },
       async getUser() {

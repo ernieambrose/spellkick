@@ -16,4 +16,5 @@ export interface Repo {
   addAwards(a: Award[]): Promise<void>; // idempotent by (profileId, badgeId)
   getParentPinHash(): Promise<string | null>;
   setParentPinHash(h: string): Promise<void>;
+  deleteFamily(): Promise<void>; // the whole account and everything in it; needs the server
 }

@@ -95,7 +95,7 @@ describe('SignIn', () => {
 
   it('sends practice queued while signed out as soon as the code is verified', async () => {
     const m = new Map<string, unknown>();
-    const store: KeyValueStore = { get: async (k) => m.get(k), set: async (k, v) => void m.set(k, v), del: async (k) => void m.delete(k) };
+    const store: KeyValueStore = { get: async (k) => m.get(k), set: async (k, v) => void m.set(k, v), del: async (k) => void m.delete(k), clear: async () => m.clear() };
     const mem = createMemoryRepo();
     const auth = stubAuth();
     const repo = createOfflineRepo(mem, store, async () => (await auth.getSession()).signedIn);
