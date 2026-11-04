@@ -47,17 +47,21 @@ export function Privacy() {
         <p>Kids never type an email, password, or anything about themselves. The grown-up owns the account.</p>
       </Section>
 
-      <Section title="What we don't do">
+      <Section title="Our promises">
         <ul className="list-disc space-y-1 pl-5">
-          <li>No ads, no tracking, no analytics.</li>
           <li>We never sell or share your information.</li>
-          <li>No one outside your family can see your kids or their progress.</li>
+          <li>Your family's data belongs to you. No one outside your family can see your kids or their progress.</li>
+          <li>If SpellKick ever shows ads, they won't use anything about your kids.</li>
+          <li>
+            We may count overall use, like how many families practiced this week, to know when the app needs to grow.
+            That's never used to build a picture of your kids.
+          </li>
         </ul>
       </Section>
 
       <Section title="Where it lives">
         <p>
-          Your data is stored with Supabase in the United States, and each family can only reach its own rows. The
+          Your data is stored with Supabase in the United States, and each family can only reach its own data. The
           app is hosted on Vercel, and sign-in codes are emailed through Resend.
         </p>
         <p>
