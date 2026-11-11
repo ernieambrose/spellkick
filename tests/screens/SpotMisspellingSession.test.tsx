@@ -43,7 +43,7 @@ it('plays one word of a real Spot the Misspelling session and records a practice
   fireEvent.click(screen.getByRole('button', { name: bad }));
   fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 
-  expect(await screen.findByText('2 of 10', {}, { timeout: 4000 })).toBeInTheDocument(); // after the 2 s reveal
+  expect(await screen.findByText('2 of 20', {}, { timeout: 4000 })).toBeInTheDocument(); // after the 2 s reveal
   const attempts = await repo.listAttempts(felix.id);
   expect(attempts).toHaveLength(1);
   expect(attempts[0]).toMatchObject({ kind: 'practice' });

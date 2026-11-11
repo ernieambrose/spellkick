@@ -133,11 +133,11 @@ describe('KidHome', () => {
     const user = userEvent.setup();
     const repo = await renderKid();
     await user.click(await screen.findByRole('link', { name: /Scramble/ }));
-    for (let i = 0; i < 10; i++) await user.click(await screen.findByRole('button', { name: 'Correct' }));
+    for (let i = 0; i < 20; i++) await user.click(await screen.findByRole('button', { name: 'Correct' }));
     expect(await screen.findByRole('button', { name: 'Play again' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'See my awards' })).toBeInTheDocument();
     expect(await screen.findByText(/First Kick/)).toBeInTheDocument();
-    expect(await repo.listAttempts(felix.id)).toHaveLength(10);
+    expect(await repo.listAttempts(felix.id)).toHaveLength(20);
   });
 
   it('counts a missed generated word as tricky, not just list words', async () => {

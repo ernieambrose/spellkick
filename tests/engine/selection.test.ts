@@ -1,6 +1,6 @@
 import gradeWords from '../../src/data/gradeWords.json';
 import { seededRng } from '../../src/engine/rng';
-import { currentList, hasUpcomingTest, selectSessionWords, type SessionWord } from '../../src/engine/selection';
+import { currentList, hasUpcomingTest, selectSessionWords, type SessionWord, SESSION_SIZE } from '../../src/engine/selection';
 import type { AttemptKind, AttemptLike, WordList } from '../../src/engine/types';
 import { normalizeWord } from '../../src/engine/words';
 
@@ -49,6 +49,7 @@ const select = (over: Partial<Input> = {}) =>
     today: TODAY,
     generatedLevel: 3,
     rng: seededRng(7),
+    size: 10, // the fixtures below are sized for 10-word sessions
     ...over,
   });
 
@@ -85,8 +86,9 @@ describe('currentList', () => {
 });
 
 describe('selectSessionWords', () => {
-  it('returns 10 words by default and respects size', () => {
-    expect(select()).toHaveLength(10);
+  it('returns SESSION_SIZE (20) words by default and respects size', () => {
+    expect(SESSION_SIZE).toBe(20);
+    expect(select({ size: undefined })).toHaveLength(20);
     expect(select({ size: 6 })).toHaveLength(6);
   });
 
@@ -102,6 +104,14 @@ describe('selectSessionWords', () => {
     expect(count(s, 'current')).toBe(7);
     expect(count(s, 'review')).toBe(3);
     for (const w of s.filter((x) => x.role === 'review')) expect(w.listId).toBe('past');
+  });
+
+  it('fills a default 20-word session from a 23-word upcoming list, ahead of older lists', () => {
+    const words = Array.from({ length: 23 }, (_, i) => `listword${i}`);
+    const older = list('old', ['alpha', 'bravo'], '2026-10-01');
+    const s = select({ lists: [list('big', words, '2026-11-06'), older], size: undefined });
+    expect(s).toHaveLength(20);
+    expect(count(s, 'current')).toBe(20);
   });
 
   it('uses only list words for a 23-word list with an upcoming test and no other lists', () => {

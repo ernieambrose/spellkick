@@ -25,6 +25,8 @@ export interface SelectInput {
   rng: Rng;
 }
 
+/** Words per practice session; a 23-word school list is mostly covered in one go. */
+export const SESSION_SIZE = 20;
 const CURRENT_SHARE = 0.7;
 const MASTERED_SHARE = 0.8;
 
@@ -63,7 +65,7 @@ interface Candidate {
 
 export function selectSessionWords(input: SelectInput): SessionWord[] {
   const { lists, attempts, today, rng } = input;
-  const size = input.size ?? 10;
+  const size = input.size ?? SESSION_SIZE;
   const usable = input.usable ?? (() => true);
   const states = summarize(attempts);
   const stateOf = (w: string): WordState => states.get(normalizeWord(w)) ?? 'new';

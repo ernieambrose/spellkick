@@ -61,7 +61,7 @@ describe('SessionShell', () => {
     const user = userEvent.setup();
     const repo = await renderAt(`/kid/${felix.id}/play/scramble`);
     await user.click(await screen.findByRole('button', { name: 'Miss then skip' }));
-    expect(await screen.findByText('2 of 10')).toBeInTheDocument();
+    expect(await screen.findByText('2 of 20')).toBeInTheDocument();
     const attempts = await repo.listAttempts(felix.id);
     expect(attempts).toHaveLength(1);
     expect(attempts[0].kind).toBe('miss');
@@ -72,7 +72,7 @@ describe('SessionShell', () => {
     const correct = await screen.findByRole('button', { name: 'Correct' });
     correct.click();
     correct.click(); // same render, before React re-renders
-    expect(await screen.findByText('2 of 10')).toBeInTheDocument();
+    expect(await screen.findByText('2 of 20')).toBeInTheDocument();
     expect(await repo.listAttempts(felix.id)).toHaveLength(1);
   });
 
@@ -86,7 +86,7 @@ describe('SessionShell', () => {
     expect(await screen.findByText(/Couldn't get your words/)).toBeInTheDocument();
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('1 of 10')).toBeInTheDocument();
+    expect(await screen.findByText('1 of 20')).toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Back to home' }));
     expect(await screen.findByText('Hi, Felix!')).toBeInTheDocument();
   });
@@ -109,7 +109,7 @@ describe('SessionShell', () => {
       await screen.findByText('Spot the Misspelling needs its word list. Try Scramble instead.'),
     ).toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Play Scramble' }));
-    expect(await screen.findByText('1 of 10')).toBeInTheDocument();
+    expect(await screen.findByText('1 of 20')).toBeInTheDocument();
     expect(window.location.pathname).toBe(`/kid/${felix.id}/play/scramble`);
   });
 
@@ -132,6 +132,6 @@ describe('SessionShell', () => {
     expect(await screen.findByText(/Couldn't get your words/)).toBeInTheDocument();
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('1 of 10')).toBeInTheDocument();
+    expect(await screen.findByText('1 of 20')).toBeInTheDocument();
   });
 });

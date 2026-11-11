@@ -68,27 +68,27 @@ const cleanAttempt = (word: string, day: string): Attempt => ({
 });
 
 describe('useSession', () => {
-  it('yields 10 words', async () => {
+  it('yields 20 words', async () => {
     const { hook } = await setup();
-    expect(hook.result.current.words).toHaveLength(10);
+    expect(hook.result.current.words).toHaveLength(20);
     expect(hook.result.current.index).toBe(0);
     expect(hook.result.current.done).toBe(false);
   });
 
-  it('marks done after 10 answers and saves one session and 10 attempts', async () => {
+  it('marks done after 20 answers and saves one session and 20 attempts', async () => {
     const { repo, hook } = await setup();
     answerAll(hook);
     expect(hook.result.current.done).toBe(true);
     await waitFor(async () => expect(await repo.listSessions(felix.id)).toHaveLength(1));
     const attempts = await repo.listAttempts(felix.id);
-    expect(attempts).toHaveLength(10);
+    expect(attempts).toHaveLength(20);
     expect(attempts.every((a) => a.ms === 3000 && a.localDate === '2026-10-28')).toBe(true);
     const [session] = await repo.listSessions(felix.id);
     expect(session.completedAt).not.toBeNull();
     expect(session.localDate).toBe('2026-10-28');
-    expect(session.points).toBe(150); // 10 clean answers, 10 + 5 fast bonus each
-    expect(session.stars).toBe(10);
-    expect(hook.result.current.summary.points).toBe(150);
+    expect(session.points).toBe(300); // 20 clean answers, 10 + 5 fast bonus each
+    expect(session.stars).toBe(20);
+    expect(hook.result.current.summary.points).toBe(300);
   });
 
   it('lists a word that reaches its third clean day in masteredToday', async () => {
@@ -147,8 +147,8 @@ describe('useSession', () => {
       listId: null,
     }));
     const { repo, hook } = await setup(async (r) => {
-      await r.saveList(mk('cur', ['planet', 'garden', 'window', 'bridge', 'castle', 'pencil', 'rocket', 'basket'], '2026-10-30'));
-      await r.saveList(mk('old', ['carrot', 'monkey', 'butter', 'ladder'], null));
+      await r.saveList(mk('cur', ['planet', 'garden', 'window', 'bridge', 'castle', 'pencil', 'rocket', 'basket', 'jacket', 'kitten', 'mitten', 'button', 'candle', 'helmet'], '2026-10-30'));
+      await r.saveList(mk('old', ['carrot', 'monkey', 'butter', 'ladder', 'turtle', 'pillow'], null));
       await r.addAttempts(oldGenerated);
     });
     expect(hook.result.current.words.every((w) => w.listId !== null)).toBe(true);
