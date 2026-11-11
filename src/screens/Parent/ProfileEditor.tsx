@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useActiveProfile } from '../../app/profileContext';
 import { useRepo } from '../../app/repoContext';
 import { hashPin } from '../../engine/pin';
+import { defaultSessionSize, SESSION_SIZES, sessionSizeFor } from '../../engine/selection';
 import type { Profile, Theme } from '../../engine/types';
 import { Card, ConfirmDelete, fieldClass, labelClass, ParentPage, primaryButton, secondaryButton } from './ui';
 
@@ -28,6 +29,8 @@ export function ProfileEditor() {
   const [grade, setGrade] = useState(2);
   const [timerOn, setTimerOn] = useState(timerDefault(2));
   const [timerTouched, setTimerTouched] = useState(false);
+  const [sessionSize, setSessionSize] = useState(defaultSessionSize(2));
+  const [sizeTouched, setSizeTouched] = useState(false);
   const [theme, setTheme] = useState<Theme>('default');
   const [pin, setPin] = useState('');
   const [keepPin, setKeepPin] = useState(false); // editing: the stored PIN stays unless removed
@@ -47,6 +50,8 @@ export function ProfileEditor() {
         setGrade(p.grade);
         setTimerOn(p.timerOn);
         setTimerTouched(true);
+        setSessionSize(sessionSizeFor(p));
+        setSizeTouched(p.sessionSize != null);
         setTheme(p.theme);
         setKeepPin(p.pinHash !== null);
       },
@@ -60,6 +65,7 @@ export function ProfileEditor() {
   function changeGrade(g: number) {
     setGrade(g);
     if (!timerTouched) setTimerOn(timerDefault(g));
+    if (!sizeTouched) setSessionSize(defaultSessionSize(g));
   }
 
   async function save(e: FormEvent) {
@@ -80,6 +86,7 @@ export function ProfileEditor() {
         timerOn,
         theme,
         createdAt: existing?.createdAt ?? new Date().toISOString(),
+        sessionSize,
       });
       navigate('/parent');
     } catch {
@@ -159,6 +166,26 @@ export function ProfileEditor() {
                 {THEMES.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="kid-session-size" className={labelClass}>
+                Words per practice
+              </label>
+              <select
+                id="kid-session-size"
+                className={fieldClass}
+                value={sessionSize}
+                onChange={(e) => {
+                  setSessionSize(Number(e.target.value));
+                  setSizeTouched(true);
+                }}
+              >
+                {SESSION_SIZES.map((n) => (
+                  <option key={n} value={n}>
+                    {n} words
                   </option>
                 ))}
               </select>

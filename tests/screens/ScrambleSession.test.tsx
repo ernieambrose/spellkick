@@ -16,8 +16,8 @@ const felix: Profile = {
   createdAt: '2026-10-01T12:00:00.000Z',
 };
 
-// Two lists (current + review) with 10 words each fill every session slot, so each word is known.
-const current = ['necessary', 'because', 'friend', 'island', 'answer', 'library', 'February', 'beautiful', 'calendar', 'weird'];
+// Two lists (20 current + 10 review) fill every session slot, so each word is known.
+const current = ['necessary', 'because', 'friend', 'island', 'answer', 'library', 'February', 'beautiful', 'calendar', 'weird', 'knowledge', 'receive', 'government', 'environment', 'restaurant', 'neighbor', 'vacuum', 'rhythm', 'schedule', 'science'];
 const review = ['separate', 'believe', 'tomorrow', 'different', 'surprise', 'thought', 'enough', 'people', 'favorite', 'minute'];
 const listWords = [...current, ...review];
 const sorted = (s: string) => [...s.toUpperCase().replace(/[\s'’-]/g, '')].sort().join('');
@@ -48,7 +48,7 @@ it('plays one word of a real Scramble session and records a clean attempt', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Check' }));
   expect(screen.getByText(/Great job/)).toBeInTheDocument();
 
-  expect(await screen.findByText('2 of 10')).toBeInTheDocument(); // after the 600 ms success flash
+  expect(await screen.findByText('2 of 20')).toBeInTheDocument(); // after the 600 ms success flash
   const attempts = await repo.listAttempts(felix.id);
   expect(attempts).toHaveLength(1);
   expect(attempts[0]).toMatchObject({ word: matches[0].toLowerCase(), kind: 'clean' }); // the repo stores words normalized

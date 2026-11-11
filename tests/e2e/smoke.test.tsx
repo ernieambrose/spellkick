@@ -6,9 +6,9 @@ import { stubAuth } from '../helpers/auth';
 
 // The whole app on a memory repo: parent sets a PIN, adds a kid and a list, the kid plays a
 // Scramble session, and the done screen shows a 1 day streak and the first badge.
-// Two 10-word lists (current + review) fill all ten session slots, so every word on screen is known.
+// Two lists (20 current + 10 review) fill all 20 session slots, so every word on screen is known.
 const lists = [
-  { name: 'Week 9', words: ['necessary', 'because', 'friend', 'island', 'answer', 'library', 'February', 'beautiful', 'calendar', 'weird'] },
+  { name: 'Week 9', words: ['necessary', 'because', 'friend', 'island', 'answer', 'library', 'February', 'beautiful', 'calendar', 'weird', 'knowledge', 'receive', 'government', 'environment', 'restaurant', 'neighbor', 'vacuum', 'rhythm', 'schedule', 'science'] },
   { name: 'Week 8', words: ['separate', 'believe', 'tomorrow', 'different', 'surprise', 'thought', 'enough', 'people', 'favorite', 'minute'] },
 ];
 const known = lists.flatMap((l) => l.words);
@@ -52,8 +52,8 @@ it('parent sets up a kid and a list, the kid finishes a Scramble session and ear
   await user.click(screen.getByRole('link', { name: /Scramble/ }));
 
   // Solve ten words by reading the tiles (the word is never shown before an answer).
-  for (let n = 1; n <= 10; n++) {
-    expect(await screen.findByText(`${n} of 10`, {}, { timeout: 3000 })).toBeInTheDocument();
+  for (let n = 1; n <= 20; n++) {
+    expect(await screen.findByText(`${n} of 20`, {}, { timeout: 3000 })).toBeInTheDocument();
     // Typing mode now sticks from word to word; go back to tiles so the letters can be read from the tray.
     const useTiles = screen.queryByRole('button', { name: 'Use tiles' });
     if (useTiles) await user.click(useTiles);
@@ -67,7 +67,7 @@ it('parent sets up a kid and a list, the kid finishes a Scramble session and ear
     await user.click(screen.getByRole('button', { name: 'Type instead' }));
     await user.type(screen.getByRole('textbox', { name: 'Type the word' }), matches[0]);
     await user.click(screen.getByRole('button', { name: 'Check' }));
-    if (n < 10) await waitFor(() => expect(screen.queryByText(/Great job/)).not.toBeInTheDocument(), { timeout: 3000 });
+    if (n < 20) await waitFor(() => expect(screen.queryByText(/Great job/)).not.toBeInTheDocument(), { timeout: 3000 });
   }
 
   // Done: streak 1 and the First Kick badge.

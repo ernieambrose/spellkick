@@ -11,7 +11,7 @@ import { makeMisspelling } from '../../engine/misspell';
 import type { Rng } from '../../engine/rng';
 import { computeStats, scoreAnswer, starsFor } from '../../engine/scoring';
 import { makeScramble } from '../../engine/scramble';
-import { selectSessionWords, type SessionWord } from '../../engine/selection';
+import { selectSessionWords, sessionSizeFor, type SessionWord } from '../../engine/selection';
 import { computeStreak, localDate } from '../../engine/streak';
 import type { Attempt, AttemptKind, Award, GameId, Profile, Session, WordList } from '../../engine/types';
 import { normalizeWord } from '../../engine/words';
@@ -130,6 +130,7 @@ async function loadSetup(
     attempts: priorAttempts,
     today: localDate(now),
     generatedLevel: profile.generatedLevel,
+    size: sessionSizeFor(profile),
     mode,
     usable,
     rng,

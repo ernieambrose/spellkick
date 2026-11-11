@@ -21,6 +21,7 @@ const p: Profile = {
   timerOn: true,
   theme: 'skate',
   createdAt: '2026-10-28T12:00:00.000Z',
+  sessionSize: 15,
 };
 const l: WordList = {
   id: 'l1',
@@ -69,7 +70,12 @@ describe('row mappers', () => {
       timer_on: true,
       theme: 'skate',
       created_at: '2026-10-28T12:00:00.000Z',
+      session_size: 15,
     }));
+  it('reads a row saved before session_size existed as "not set"', () => {
+    const { session_size: _, ...old } = profileToRow(p);
+    expect(profileFromRow(old).sessionSize).toBeNull();
+  });
   it('maps word list to snake_case columns', () =>
     expect(listToRow(l)).toEqual({
       id: 'l1',

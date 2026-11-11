@@ -25,6 +25,17 @@ export interface SelectInput {
   rng: Rng;
 }
 
+/** Words per practice session; a 23-word school list is mostly covered in one go. */
+export const SESSION_SIZE = 20;
+/** The choices a parent gets for words per session. */
+export const SESSION_SIZES = [10, 15, 20, 25] as const;
+
+/** Younger kids (grade 2 and under) start with shorter sessions. */
+export const defaultSessionSize = (grade: number) => (grade <= 2 ? 10 : SESSION_SIZE);
+
+/** The kid's chosen session length, or the grade default when it was never set. */
+export const sessionSizeFor = (p: { grade: number; sessionSize?: number | null }) =>
+  p.sessionSize ?? defaultSessionSize(p.grade);
 const CURRENT_SHARE = 0.7;
 const MASTERED_SHARE = 0.8;
 
@@ -63,7 +74,7 @@ interface Candidate {
 
 export function selectSessionWords(input: SelectInput): SessionWord[] {
   const { lists, attempts, today, rng } = input;
-  const size = input.size ?? 10;
+  const size = input.size ?? SESSION_SIZE;
   const usable = input.usable ?? (() => true);
   const states = summarize(attempts);
   const stateOf = (w: string): WordState => states.get(normalizeWord(w)) ?? 'new';
