@@ -146,6 +146,15 @@ export function ParentHome() {
           </Link>
         </div>
       )}
+
+      {kids && (
+        <Link
+          to="/parent/delete"
+          className="mt-auto flex min-h-11 items-center self-start rounded-full px-5 font-semibold text-tricky-text hover:bg-tricky-bg"
+        >
+          Delete my family's data
+        </Link>
+      )}
     </main>
   );
 }

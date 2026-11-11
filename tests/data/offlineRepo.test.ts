@@ -10,6 +10,7 @@ const mapStore = (): KeyValueStore => {
     get: async (k) => m.get(k),
     set: async (k, v) => void m.set(k, structuredClone(v)),
     del: async (k) => void m.delete(k),
+    clear: async () => m.clear(),
   };
 };
 
@@ -114,6 +115,26 @@ describe('createOfflineRepo', () => {
     await offline.flush();
     expect(await offline.pending()).toBe(0);
     expect(await mem.listAttempts('p1')).toHaveLength(3);
+  });
+
+  it('deleteFamily empties the queue and the local cache once the server delete succeeds', async () => {
+    const mem = createMemoryRepo();
+    const { repo, state } = flaky(mem);
+    const store = mapStore();
+    const offline = createOfflineRepo(repo, store);
+    await offline.listAttempts('p1'); // cache a read
+    state.down = true;
+    await offline.addAttempts([attempt()]);
+    expect(await offline.pending()).toBe(1);
+
+    await expect(offline.deleteFamily()).rejects.toThrow(); // server down: nothing local touched
+    expect(await offline.pending()).toBe(1);
+
+    state.down = false;
+    await offline.deleteFamily();
+    expect(await offline.pending()).toBe(0);
+    expect(await store.get('read:listAttempts:p1')).toBeUndefined();
+    expect(await store.get('queue')).toBeUndefined();
   });
 
   it('stops flushing at the first failure and keeps the rest queued in order', async () => {
