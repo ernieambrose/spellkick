@@ -1,4 +1,4 @@
-import { del, get, set } from 'idb-keyval';
+import { clear, del, get, set } from 'idb-keyval';
 import type { Attempt, Award, Profile, Session } from '../engine/types';
 import type { Repo } from './repo';
 
@@ -6,12 +6,14 @@ export type KeyValueStore = {
   get(k: string): Promise<unknown>;
   set(k: string, v: unknown): Promise<void>;
   del(k: string): Promise<void>;
+  clear(): Promise<void>;
 };
 
 export const idbStore: KeyValueStore = {
   get: (k) => get(k),
   set: (k, v) => set(k, v),
   del: (k) => del(k),
+  clear: () => clear(),
 };
 
 type QueueItem =
@@ -244,6 +246,13 @@ export function createOfflineRepo(
       await persist();
     },
     setParentPinHash: (h) => inner.setParentPinHash(h),
+    deleteFamily: async () => {
+      await inner.deleteFamily(); // online only: a failure throws and nothing local is touched
+      await loaded;
+      queue = [];
+      // The queue, dead letters, and cached reads all belong to the deleted family.
+      await store.clear().catch((err) => console.warn('offlineRepo: could not clear the local cache', err));
+    },
 
     flush,
     pending: async () => {

@@ -41,3 +41,16 @@ describe('createSupabaseRepo.setGeneratedLevel', () => {
     expect(err).toMatchObject({ code: '42501', status: 401 });
   });
 });
+
+describe('createSupabaseRepo.deleteFamily', () => {
+  it('calls the delete_my_family function and throws if it fails', async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: null, status: 204 }));
+    await createSupabaseRepo({ rpc } as unknown as SupabaseClient).deleteFamily();
+    expect(rpc).toHaveBeenCalledWith('delete_my_family');
+
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } as never, status: 500 });
+    await expect(createSupabaseRepo({ rpc } as unknown as SupabaseClient).deleteFamily()).rejects.toBeInstanceOf(
+      SupabaseRepoError,
+    );
+  });
+});

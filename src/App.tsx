@@ -9,6 +9,7 @@ import type { Repo } from './data/repo';
 import { Awards } from './screens/Awards/Awards';
 import { KidHome } from './screens/KidHome/KidHome';
 import { KidRoute } from './screens/KidHome/KidRoute';
+import { DeleteFamily } from './screens/Parent/DeleteFamily';
 import { ListEditor } from './screens/Parent/ListEditor';
 import { ParentGate } from './screens/Parent/ParentGate';
 import { ParentHome } from './screens/Parent/ParentHome';
@@ -58,6 +59,7 @@ export default function App({ repo, authClient }: AppProps) {
                   <Route path="profile/:id" element={<ProfileEditor />} />
                   <Route path="list/:id" element={<ListEditor />} />
                   <Route path="progress/:profileId" element={<ProgressView />} />
+                  <Route path="delete" element={<DeleteFamily />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

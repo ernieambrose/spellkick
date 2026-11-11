@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import type { AuthError } from '../../app/authClient';
 import { useAuth } from '../../app/authContext';
 
@@ -18,6 +18,7 @@ const buttonClass =
 
 export function SignIn() {
   const { status, sendCode, verifyCode } = useAuth();
+  const deleted = (useLocation().state as { deleted?: boolean } | null)?.deleted === true;
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -48,6 +49,11 @@ export function SignIn() {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-8">
       <h1 className="text-center text-4xl font-bold text-primary">SpellKick</h1>
+      {deleted && (
+        <p role="status" className="mt-6 rounded-2xl bg-mastered-bg p-4 text-center font-semibold text-mastered-text">
+          Your family's data has been deleted.
+        </p>
+      )}
       <div className="mt-8 rounded-3xl bg-white p-6 shadow-sm">
         {step === 'email' ? (
           <form onSubmit={onSend} className="space-y-4">
