@@ -16,6 +16,14 @@ React 18, TypeScript, Vite, Tailwind v4, Supabase for sign-in and storage. Witho
 
 ![Awards](docs/screenshots/awards-768.png)
 
+## How it's built
+
+- Every change starts as a Linear issue (APP-xx) and gets its own branch and pull request.
+- CI runs lint, type checks, tests and a production build on every pull request.
+- `main` is protected: changes land only through a pull request that passes CI.
+- Vercel deploys `main` to [spellkick.app](https://spellkick.app).
+- Built with Claude Code, with me setting scope, reviewing every change and deciding what ships.
+
 ## Development
 
 ```
