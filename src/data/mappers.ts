@@ -12,6 +12,7 @@ export interface ProfileRow {
   timer_on: boolean;
   theme: string;
   created_at: string;
+  session_size?: number | null; // 0004_session_size.sql
 }
 
 export interface WordListRow {
@@ -66,6 +67,7 @@ export const profileToRow = (p: Profile): ProfileRow => ({
   timer_on: p.timerOn,
   theme: p.theme,
   created_at: p.createdAt,
+  session_size: p.sessionSize ?? null,
 });
 
 export const profileFromRow = (r: ProfileRow): Profile => ({
@@ -77,6 +79,7 @@ export const profileFromRow = (r: ProfileRow): Profile => ({
   timerOn: r.timer_on,
   theme: r.theme as Theme,
   createdAt: r.created_at,
+  sessionSize: r.session_size ?? null,
 });
 
 export const listToRow = (l: WordList): WordListRow => ({

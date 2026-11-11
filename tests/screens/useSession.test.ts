@@ -158,3 +158,13 @@ describe('useSession', () => {
     expect(stored.generatedLevel).toBe(5);
   });
 });
+
+describe('useSession session length', () => {
+  it("uses the kid's words-per-practice setting", async () => {
+    const repo = createMemoryRepo();
+    await repo.saveProfile({ ...felix, sessionSize: 15 });
+    const hook = renderHook(() => useSession('scramble', { rng: seededRng(7), now }), { wrapper: wrapper(repo) });
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(hook.result.current.words).toHaveLength(15);
+  });
+});

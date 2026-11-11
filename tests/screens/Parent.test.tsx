@@ -205,6 +205,33 @@ describe('ProfileEditor', () => {
     expect(saved.pinHash).toBe(await hashPin('2468', saved.id));
   });
 
+  it('words per practice follows the grade until the parent picks one, and is saved', async () => {
+    const repo = await repoWith();
+    const user = renderAt('/parent/profile/new', repo);
+    await typePin(user, PARENT_PIN);
+    await user.type(await screen.findByLabelText('Name'), 'Junie');
+    const size = screen.getByLabelText('Words per practice');
+    expect(size).toHaveValue('10'); // grade 2 default
+    await user.selectOptions(screen.getByLabelText('Grade'), '5');
+    expect(size).toHaveValue('20');
+    await user.selectOptions(size, '15');
+    await user.selectOptions(screen.getByLabelText('Grade'), '1');
+    expect(size).toHaveValue('15'); // a picked size stays put
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('heading', { name: 'Parent' })).toBeInTheDocument();
+    const [saved] = await repo.listProfiles();
+    expect(saved.sessionSize).toBe(15);
+  });
+
+  it('shows the grade default for a kid saved before the setting existed', async () => {
+    const felix = profile({ grade: 5, sessionSize: null });
+    const repo = await repoWith([felix]);
+    const user = renderAt(`/parent/profile/${felix.id}`, repo);
+    await typePin(user, PARENT_PIN);
+    expect(await screen.findByLabelText('Words per practice')).toHaveValue('20');
+  });
+
   it('deleting a kid asks "Are you sure?" first', async () => {
     const felix = profile();
     const repo = await repoWith([felix]);

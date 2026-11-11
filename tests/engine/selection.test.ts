@@ -1,6 +1,6 @@
 import gradeWords from '../../src/data/gradeWords.json';
 import { seededRng } from '../../src/engine/rng';
-import { currentList, hasUpcomingTest, selectSessionWords, type SessionWord, SESSION_SIZE } from '../../src/engine/selection';
+import { currentList, hasUpcomingTest, selectSessionWords, sessionSizeFor, type SessionWord, SESSION_SIZE } from '../../src/engine/selection';
 import type { AttemptKind, AttemptLike, WordList } from '../../src/engine/types';
 import { normalizeWord } from '../../src/engine/words';
 
@@ -52,6 +52,15 @@ const select = (over: Partial<Input> = {}) =>
     size: 10, // the fixtures below are sized for 10-word sessions
     ...over,
   });
+
+describe('sessionSizeFor', () => {
+  it('uses the chosen size, else 10 for grade 2 and under and 20 above', () => {
+    expect(sessionSizeFor({ grade: 2, sessionSize: 25 })).toBe(25);
+    expect(sessionSizeFor({ grade: 2, sessionSize: null })).toBe(10);
+    expect(sessionSizeFor({ grade: 1 })).toBe(10);
+    expect(sessionSizeFor({ grade: 3, sessionSize: null })).toBe(20);
+  });
+});
 
 describe('currentList', () => {
   it('picks the earliest upcoming test list', () =>

@@ -15,6 +15,7 @@ export interface Profile {
   timerOn: boolean;
   theme: Theme;
   createdAt: string;
+  sessionSize?: number | null; // words per session; unset = by grade (see sessionSizeFor)
 }
 
 export interface WordList {
